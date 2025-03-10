@@ -22,6 +22,7 @@ import FinancialChart from "@/components/dashboard/FinancialChart";
 import BlurredCard from "@/components/ui/BlurredCard";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { formatCurrency } from "@/lib/utils";
 
 const Index = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -42,16 +43,16 @@ const Index = () => {
           <div className="max-w-7xl mx-auto">
             <header className="mb-6">
               <h1 className="text-2xl md:text-3xl font-bold mb-1 animate-fade-in">
-                Financial Dashboard
+                Dashboard Keuangan
               </h1>
               <p className="text-muted-foreground animate-fade-in" style={{ animationDelay: "100ms" }}>
-                Overview of your company's financial performance
+                Ikhtisar kinerja keuangan perusahaan Anda
               </p>
             </header>
             
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               <StatCard
-                title="Revenue"
+                title="Pendapatan"
                 value={DEMO_STATS.revenue}
                 icon={<DollarSign className="h-5 w-5" />}
                 change={12.5}
@@ -60,7 +61,7 @@ const Index = () => {
                 style={{ animationDelay: "150ms" }}
               />
               <StatCard
-                title="Expenses"
+                title="Pengeluaran"
                 value={DEMO_STATS.expenses}
                 icon={<CreditCard className="h-5 w-5" />}
                 change={7.2}
@@ -69,7 +70,7 @@ const Index = () => {
                 style={{ animationDelay: "200ms" }}
               />
               <StatCard
-                title="Profit"
+                title="Keuntungan"
                 value={DEMO_STATS.profit}
                 icon={<TrendingUp className="h-5 w-5" />}
                 change={9.3}
@@ -78,7 +79,7 @@ const Index = () => {
                 style={{ animationDelay: "250ms" }}
               />
               <StatCard
-                title="Growth Rate"
+                title="Tingkat Pertumbuhan"
                 value={`${DEMO_STATS.growthRate}%`}
                 icon={<PercentCircle className="h-5 w-5" />}
                 change={2.1}
@@ -99,7 +100,7 @@ const Index = () => {
             <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
               <BlurredCard hoverAnimation={true}>
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold">Quick Actions</h2>
+                  <h2 className="text-xl font-semibold">Aksi Cepat</h2>
                   <Button variant="ghost" size="icon">
                     <MoreHorizontal className="h-5 w-5" />
                   </Button>
@@ -108,36 +109,36 @@ const Index = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <Button className="flex-col h-24 bg-gradient-blue hover:bg-gradient-blue/90 shadow-subtle">
                     <BarChart2 className="h-6 w-6 mb-2" />
-                    <span>Generate Report</span>
+                    <span>Buat Laporan</span>
                   </Button>
                   <Button className="flex-col h-24 bg-gradient-green hover:bg-gradient-green/90 shadow-subtle">
                     <CreditCard className="h-6 w-6 mb-2" />
-                    <span>New Transaction</span>
+                    <span>Transaksi Baru</span>
                   </Button>
                   <Button className="flex-col h-24 bg-gradient-orange hover:bg-gradient-orange/90 shadow-subtle">
                     <DollarSign className="h-6 w-6 mb-2" />
-                    <span>Manage Budget</span>
+                    <span>Kelola Anggaran</span>
                   </Button>
                   <Button className="flex-col h-24 bg-gradient-purple hover:bg-gradient-purple/90 shadow-subtle">
                     <MenuIcon className="h-6 w-6 mb-2" />
-                    <span>More Options</span>
+                    <span>Opsi Lainnya</span>
                   </Button>
                 </div>
               </BlurredCard>
               
               <BlurredCard hoverAnimation={true}>
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-xl font-semibold">Upcoming Payments</h2>
+                  <h2 className="text-xl font-semibold">Pembayaran Mendatang</h2>
                   <Button variant="outline" size="sm" className="text-xs">
-                    View All
+                    Lihat Semua
                   </Button>
                 </div>
                 
                 <div className="space-y-3">
                   {[
-                    { name: "Server Hosting", amount: 299.99, date: "Aug 25, 2023" },
-                    { name: "Software Licenses", amount: 1299.50, date: "Aug 27, 2023" },
-                    { name: "Office Rent", amount: 3500.00, date: "Sep 01, 2023" },
+                    { name: "Sewa Server", amount: 2999900, date: "25 Agt, 2023" },
+                    { name: "Lisensi Software", amount: 12995000, date: "27 Agt, 2023" },
+                    { name: "Sewa Kantor", amount: 35000000, date: "01 Sep, 2023" },
                   ].map((payment, index) => (
                     <div 
                       key={index} 
@@ -150,13 +151,10 @@ const Index = () => {
                     >
                       <div>
                         <p className="font-medium">{payment.name}</p>
-                        <p className="text-xs text-muted-foreground">Due {payment.date}</p>
+                        <p className="text-xs text-muted-foreground">Jatuh tempo {payment.date}</p>
                       </div>
                       <span className="font-semibold">
-                        {new Intl.NumberFormat("en-US", {
-                          style: "currency",
-                          currency: "USD",
-                        }).format(payment.amount)}
+                        {formatCurrency(payment.amount)}
                       </span>
                     </div>
                   ))}

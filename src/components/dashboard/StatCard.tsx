@@ -1,7 +1,7 @@
 
 import React from "react";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import BlurredCard from "@/components/ui/BlurredCard";
 
 interface StatCardProps {
@@ -27,14 +27,9 @@ const StatCard = ({
   iconClass,
   style,
 }: StatCardProps) => {
-  // Format the displayed value if it's a number
+  // Format the displayed value if it's a number using the formatCurrency utility
   const formattedValue = typeof value === "number"
-    ? new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
-        minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
-      }).format(value)
+    ? formatCurrency(value)
     : value;
 
   return (

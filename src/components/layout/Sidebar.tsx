@@ -22,12 +22,12 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   };
 
   const sidebarContent = (
-    <div className="h-full flex flex-col gap-1 py-4">
+    <div className="h-full flex flex-col gap-1 py-6">
       <div className="px-3 py-2">
-        <h2 className="text-sm font-medium text-muted-foreground mb-3 px-4">
+        <h2 className="text-sm font-medium text-muted-foreground mb-4 px-4">
           MENU
         </h2>
-        <nav className="space-y-1 px-2">
+        <nav className="space-y-2 px-2">
           {MENU_ITEMS.map((item) => (
             <NavLink
               key={item.path}
@@ -35,9 +35,9 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
               onClick={isMobile ? onClose : undefined}
               className={({ isActive }) =>
                 cn(
-                  "flex items-center gap-3 px-4 py-2.5 text-sm font-medium rounded-md transition-all duration-200",
+                  "flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200",
                   isActive
-                    ? "bg-primary/10 text-primary"
+                    ? "bg-primary/15 text-primary"
                     : "text-foreground/70 hover:bg-accent/50 hover:text-foreground"
                 )
               }
@@ -53,15 +53,15 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
         <div className="glass-morph rounded-xl p-4 flex flex-col gap-3">
           <div className="flex items-center gap-3">
             <div className="bg-primary/10 text-primary p-2 rounded-md">
-              <Icons.Lightbulb className="h-5 w-5" />
+              <Icons.HelpCircle className="h-5 w-5" />
             </div>
-            <p className="text-sm font-medium">Need help?</p>
+            <p className="text-sm font-medium">Butuh bantuan?</p>
           </div>
           <p className="text-xs text-muted-foreground">
-            Access our documentation and customer support
+            Akses dokumentasi dan dukungan pelanggan kami
           </p>
           <Button variant="outline" size="sm" className="w-full text-xs">
-            Support Center
+            Pusat Bantuan
           </Button>
         </div>
       </div>

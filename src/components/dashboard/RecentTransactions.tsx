@@ -1,8 +1,9 @@
 
 import React from "react";
 import { format } from "date-fns";
+import { id } from "date-fns/locale";
 import { ArrowDownLeft, ArrowUpRight, AlertCircle, CheckCircle2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import BlurredCard from "@/components/ui/BlurredCard";
 import { Button } from "@/components/ui/button";
 
@@ -24,9 +25,9 @@ const RecentTransactions = ({ transactions, className }: RecentTransactionsProps
   return (
     <BlurredCard className={cn("w-full", className)}>
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-xl font-semibold">Recent Transactions</h2>
+        <h2 className="text-xl font-semibold">Transaksi Terbaru</h2>
         <Button variant="outline" size="sm" className="text-xs">
-          View All
+          Lihat Semua
         </Button>
       </div>
       
@@ -59,7 +60,7 @@ const RecentTransactions = ({ transactions, className }: RecentTransactionsProps
               <div>
                 <p className="font-medium text-sm">{transaction.description}</p>
                 <p className="text-xs text-muted-foreground">
-                  {format(transaction.date, "d MMM yyyy")} • {transaction.category}
+                  {format(transaction.date, "d MMM yyyy", { locale: id })} • {transaction.category}
                 </p>
               </div>
             </div>
@@ -70,10 +71,7 @@ const RecentTransactions = ({ transactions, className }: RecentTransactionsProps
                 transaction.amount > 0 ? "text-green-600" : "text-red-600"
               )}>
                 {transaction.amount > 0 ? "+" : ""}
-                {new Intl.NumberFormat("en-US", {
-                  style: "currency",
-                  currency: "USD",
-                }).format(Math.abs(transaction.amount))}
+                {formatCurrency(Math.abs(transaction.amount))}
               </span>
               
               {transaction.status === "pending" ? (

@@ -6,15 +6,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Helper function to format currency values
+// Helper function to format currency values as Indonesian Rupiah
 export function formatCurrency(value: number, options?: Intl.NumberFormatOptions): string {
   const defaultOptions = {
     style: 'currency',
-    currency: 'USD',
+    currency: 'IDR',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
     ...options
   };
   
-  return new Intl.NumberFormat('en-US', defaultOptions).format(value);
+  return new Intl.NumberFormat('id-ID', defaultOptions).format(value);
 }
