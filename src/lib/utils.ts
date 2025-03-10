@@ -8,7 +8,7 @@ export function cn(...inputs: ClassValue[]) {
 
 // Helper function to format currency values as Indonesian Rupiah
 export function formatCurrency(value: number, options?: Intl.NumberFormatOptions): string {
-  const defaultOptions = {
+  const defaultOptions: Intl.NumberFormatOptions = {
     style: 'currency',
     currency: 'IDR',
     minimumFractionDigits: 0,
