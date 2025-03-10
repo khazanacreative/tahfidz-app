@@ -13,8 +13,13 @@ export function formatCurrency(value: number, options?: Intl.NumberFormatOptions
     currency: 'IDR',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0,
+    currencyDisplay: 'symbol',
     ...options
   };
   
-  return new Intl.NumberFormat('id-ID', defaultOptions).format(value);
+  // Format using Intl.NumberFormat
+  const formatted = new Intl.NumberFormat('id-ID', defaultOptions).format(value);
+  
+  // Replace the default "Rp" with "Rp." as requested
+  return formatted.replace('Rp', 'Rp.');
 }
