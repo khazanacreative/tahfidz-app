@@ -12,7 +12,7 @@ import {
   Bar,
   Legend,
 } from "recharts";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import BlurredCard from "@/components/ui/BlurredCard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -26,15 +26,6 @@ interface FinancialChartProps {
   data: ChartData[];
   className?: string;
 }
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value);
-};
 
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (active && payload && payload.length) {
@@ -94,7 +85,7 @@ const FinancialChart = ({ data, className }: FinancialChartProps) => {
                 axisLine={false}
                 tickLine={false}
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => `$${value / 1000}k`}
+                tickFormatter={(value) => `Rp.${value / 1000}k`}
               />
               <Tooltip content={<CustomTooltip />} />
               <Area
@@ -134,7 +125,7 @@ const FinancialChart = ({ data, className }: FinancialChartProps) => {
                 axisLine={false}
                 tickLine={false}
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => `$${value / 1000}k`}
+                tickFormatter={(value) => `Rp.${value / 1000}k`}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend />

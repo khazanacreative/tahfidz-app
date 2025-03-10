@@ -21,7 +21,7 @@ import {
   Legend,
   Tooltip,
 } from "recharts";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 // Budget data for demonstration
 const budgetCategories = [
@@ -78,11 +78,7 @@ const Budget = () => {
                   <div>
                     <h3 className="text-sm font-medium text-muted-foreground">Total Budget</h3>
                     <p className="text-2xl font-semibold mt-1">
-                      {new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: "USD",
-                        minimumFractionDigits: 0,
-                      }).format(totalAllocated)}
+                      {formatCurrency(totalAllocated)}
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
                       Fiscal Year 2023
@@ -99,11 +95,7 @@ const Budget = () => {
                   <div>
                     <h3 className="text-sm font-medium text-muted-foreground">Budget Used</h3>
                     <p className="text-2xl font-semibold mt-1">
-                      {new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: "USD",
-                        minimumFractionDigits: 0,
-                      }).format(totalSpent)}
+                      {formatCurrency(totalSpent)}
                     </p>
                     <div className="flex items-center gap-1 mt-1">
                       <Progress value={budgetProgress} className="h-2 w-24" />
@@ -123,11 +115,7 @@ const Budget = () => {
                   <div>
                     <h3 className="text-sm font-medium text-muted-foreground">Remaining</h3>
                     <p className="text-2xl font-semibold mt-1">
-                      {new Intl.NumberFormat("en-US", {
-                        style: "currency",
-                        currency: "USD",
-                        minimumFractionDigits: 0,
-                      }).format(totalAllocated - totalSpent)}
+                      {formatCurrency(totalAllocated - totalSpent)}
                     </p>
                     <p className="text-xs text-green-600 font-medium mt-1">
                       {(100 - budgetProgress).toFixed(0)}% Available
@@ -174,13 +162,7 @@ const Budget = () => {
                         
                         <div className="flex justify-between items-center text-sm mb-1.5">
                           <span className="text-muted-foreground">
-                            {new Intl.NumberFormat("en-US", {
-                              style: "currency",
-                              currency: "USD",
-                            }).format(category.spent)} of {new Intl.NumberFormat("en-US", {
-                              style: "currency",
-                              currency: "USD",
-                            }).format(category.allocated)}
+                            {formatCurrency(category.spent)} of {formatCurrency(category.allocated)}
                           </span>
                           <span className={cn(
                             "font-medium",
@@ -233,11 +215,7 @@ const Budget = () => {
                         ))}
                       </Pie>
                       <Tooltip 
-                        formatter={(value) => new Intl.NumberFormat("en-US", {
-                          style: "currency",
-                          currency: "USD",
-                          minimumFractionDigits: 0,
-                        }).format(value as number)}
+                        formatter={(value) => formatCurrency(value as number)}
                       />
                       <Legend />
                     </RechartsPieChart>
@@ -289,10 +267,7 @@ const Budget = () => {
                           </span>
                         </td>
                         <td className="px-4 py-3 text-sm font-medium">
-                          {new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: "USD",
-                          }).format(adjustment.amount)}
+                          {formatCurrency(adjustment.amount)}
                         </td>
                         <td className="px-4 py-3 text-sm">{adjustment.approver}</td>
                       </tr>

@@ -14,7 +14,7 @@ import BlurredCard from "@/components/ui/BlurredCard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 const Transactions = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -130,10 +130,7 @@ const Transactions = () => {
                           transaction.amount > 0 ? "text-green-600" : "text-red-600"
                         )}>
                           {transaction.amount > 0 ? "+" : ""}
-                          {new Intl.NumberFormat("en-US", {
-                            style: "currency",
-                            currency: "USD",
-                          }).format(transaction.amount)}
+                          {formatCurrency(transaction.amount)}
                         </td>
                         <td className="px-4 py-3 text-sm">
                           <span className={cn(
