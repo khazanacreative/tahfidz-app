@@ -13,6 +13,7 @@ interface StatCardProps {
   className?: string;
   gradientClass?: string;
   iconClass?: string;
+  style?: React.CSSProperties;
 }
 
 const StatCard = ({
@@ -24,6 +25,7 @@ const StatCard = ({
   className,
   gradientClass,
   iconClass,
+  style,
 }: StatCardProps) => {
   // Format the displayed value if it's a number
   const formattedValue = typeof value === "number"
@@ -39,6 +41,7 @@ const StatCard = ({
     <BlurredCard 
       className={cn("animate-slide-in-bottom", className)}
       hoverAnimation={true}
+      style={style}
     >
       <div className="flex items-start justify-between">
         <div>
