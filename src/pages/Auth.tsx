@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { BookOpen, ArrowLeft } from "lucide-react";
+import { BookOpen, ArrowLeft, Smartphone } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { z } from "zod";
 
@@ -293,6 +294,16 @@ export default function Auth() {
               </form>
             </TabsContent>
           </Tabs>
+
+          <div className="mt-6 pt-4 border-t">
+            <Link 
+              to="/ustadz/auth" 
+              className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
+            >
+              <Smartphone className="w-4 h-4" />
+              Login sebagai Ustadz / Wali Santri
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </div>
