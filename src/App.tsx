@@ -82,7 +82,7 @@ const App = () => (
             <Route path="/profil" element={<Profil />} />
             <Route path="/pengaturan" element={<Pengaturan />} />
             {/* Mobile Ustadz Routes */}
-            <Route path="/ustadz" element={<AuthUstadz />} />
+            <Route path="/ustadz/login" element={<AuthUstadz />} />
             <Route path="/ustadz/setoran" element={<SetoranMobile />} />
             <Route path="/ustadz/drill" element={<DrillMobile />} />
             <Route path="/ustadz/tasmi" element={<TasmiMobile />} />

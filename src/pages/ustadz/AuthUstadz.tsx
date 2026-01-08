@@ -20,15 +20,15 @@ export default function AuthUstadz() {
   const [loginData, setLoginData] = useState({ email: "", password: "" });
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
-        navigate("/ustadz/setoran");
+        navigate("/ustadz/setoran", { replace: true });
       }
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/ustadz/setoran");
+        navigate("/ustadz/setoran", { replace: true });
       }
     });
 
