@@ -36,6 +36,7 @@ import Profil from "./pages/Profil";
 import Pengaturan from "./pages/Pengaturan";
 // Mobile Ustadz pages
 import AuthUstadz from "./pages/ustadz/AuthUstadz";
+import DashboardMobile from "./pages/ustadz/DashboardMobile";
 import SetoranMobile from "./pages/ustadz/SetoranMobile";
 import DrillMobile from "./pages/ustadz/DrillMobile";
 import TasmiMobile from "./pages/ustadz/TasmiMobile";
@@ -83,6 +84,7 @@ const App = () => (
             <Route path="/pengaturan" element={<Pengaturan />} />
             {/* Mobile Ustadz Routes */}
             <Route path="/ustadz/login" element={<AuthUstadz />} />
+            <Route path="/ustadz/dashboard" element={<DashboardMobile />} />
             <Route path="/ustadz/setoran" element={<SetoranMobile />} />
             <Route path="/ustadz/drill" element={<DrillMobile />} />
             <Route path="/ustadz/tasmi" element={<TasmiMobile />} />
