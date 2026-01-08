@@ -6,10 +6,10 @@ import { Layout } from "@/components/Layout";
 
 export default function Dashboard() {
   const [stats, setStats] = useState({
-    totalSantri: 0,
-    totalHalaqoh: 0,
-    totalSetoran: 0,
-    avgKelancaran: 0,
+    totalUsers: 0,
+    totalAsatidz: 0,
+    totalWaliSantri: 0,
+    totalAdmin: 0,
   });
 
   useEffect(() => {
@@ -17,46 +17,47 @@ export default function Dashboard() {
   }, []);
 
   const fetchStats = async () => {
-    const [santriRes, halaqohRes, setoranRes] = await Promise.all([
-      supabase.from("santri").select("*", { count: "exact" }),
-      supabase.from("halaqoh").select("*", { count: "exact" }),
-      supabase.from("setoran").select("nilai_kelancaran"),
-    ]);
+    // Fetch user role stats from user_roles table
+    const { data: roles, error } = await supabase
+      .from("user_roles")
+      .select("role");
 
-    const avgKelancaran = setoranRes.data?.length
-      ? setoranRes.data.reduce((acc, curr) => acc + (curr.nilai_kelancaran || 0), 0) / setoranRes.data.length
-      : 0;
+    if (!error && roles) {
+      const adminCount = roles.filter(r => r.role === "admin").length;
+      const asatidzCount = roles.filter(r => r.role === "asatidz").length;
+      const waliSantriCount = roles.filter(r => r.role === "wali_santri").length;
 
-    setStats({
-      totalSantri: santriRes.count || 0,
-      totalHalaqoh: halaqohRes.count || 0,
-      totalSetoran: setoranRes.data?.length || 0,
-      avgKelancaran: Math.round(avgKelancaran),
-    });
+      setStats({
+        totalUsers: roles.length,
+        totalAsatidz: asatidzCount,
+        totalWaliSantri: waliSantriCount,
+        totalAdmin: adminCount,
+      });
+    }
   };
 
   const statCards = [
     {
-      title: "Total Santri",
-      value: stats.totalSantri,
+      title: "Total Pengguna",
+      value: stats.totalUsers,
       icon: Users,
       gradient: "from-green-500 to-lime-500",
     },
     {
-      title: "Total Halaqoh",
-      value: stats.totalHalaqoh,
+      title: "Total Asatidz",
+      value: stats.totalAsatidz,
       icon: BookMarked,
       gradient: "from-green-500 to-lime-500",
     },
     {
-      title: "Total Setoran",
-      value: stats.totalSetoran,
+      title: "Total Wali Santri",
+      value: stats.totalWaliSantri,
       icon: BookOpen,
       gradient: "from-green-500 to-lime-500",
     },
     {
-      title: "Rata-rata Kelancaran",
-      value: `${stats.avgKelancaran}%`,
+      title: "Total Admin",
+      value: stats.totalAdmin,
       icon: TrendingUp,
       gradient: "from-green-500 to-lime-500",
     },
@@ -111,7 +112,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-2 text-sm">
                 <div className="w-2 h-2 rounded-full bg-chart-3"></div>
                 <span className="text-muted-foreground">
-                  Akses berbasis role untuk Admin, Koordinator, Asatidz, Wali Santri, dan Yayasan
+                  Akses berbasis role untuk Admin, Asatidz, dan Wali Santri
                 </span>
               </div>
             </div>

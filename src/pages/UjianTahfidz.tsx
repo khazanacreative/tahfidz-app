@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,17 +36,17 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { GraduationCap, Plus, AlertCircle, CheckCircle2, Info, Eye } from "lucide-react";
 import { JuzSelector } from "@/components/JuzSelector";
-import { supabase } from "@/integrations/supabase/client";
 
-interface Halaqoh {
-  id: string;
-  nama_halaqoh: string;
-}
+// Mock data
+const mockHalaqohList = [
+  { id: "1", nama_halaqoh: "Halaqoh A" },
+  { id: "2", nama_halaqoh: "Halaqoh B" },
+];
 
-interface Kelas {
-  id: string;
-  nama_kelas: string;
-}
+const mockKelasList = [
+  { id: "1", nama_kelas: "Paket A Kelas 6" },
+  { id: "2", nama_kelas: "KBTK A" },
+];
 
 const UjianTahfidz = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -58,8 +58,6 @@ const UjianTahfidz = () => {
   const [catatan, setCatatan] = useState("");
   const [filterHalaqoh, setFilterHalaqoh] = useState("all");
   const [filterKelas, setFilterKelas] = useState("all");
-  const [halaqohList, setHalaqohList] = useState<Halaqoh[]>([]);
-  const [kelasList, setKelasList] = useState<Kelas[]>([]);
   
   // State untuk 10 soal - setiap soal memiliki halaman dan pengurangan nilai
   const [soalData, setSoalData] = useState<Array<{
@@ -71,18 +69,6 @@ const UjianTahfidz = () => {
       pengurangan: 0,
     }))
   );
-
-  useEffect(() => {
-    const fetchFilters = async () => {
-      const [halaqohRes, kelasRes] = await Promise.all([
-        supabase.from("halaqoh").select("id, nama_halaqoh").order("nama_halaqoh"),
-        supabase.from("kelas").select("id, nama_kelas").order("nama_kelas"),
-      ]);
-      if (halaqohRes.data) setHalaqohList(halaqohRes.data);
-      if (kelasRes.data) setKelasList(kelasRes.data);
-    };
-    fetchFilters();
-  }, []);
 
   // Dummy data
   const santriList = [
@@ -156,8 +142,8 @@ const UjianTahfidz = () => {
     setSelectedSantri("");
     setSelectedAsatidz("");
     setTanggalUjian("");
-    setMateriDari(null);
-    setMateriSampai(null);
+    setMateriDari("");
+    setMateriSampai("");
     setCatatan("");
     setSoalData(
       Array.from({ length: 10 }, () => ({
@@ -229,7 +215,7 @@ const UjianTahfidz = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Semua Halaqoh</SelectItem>
-                        {halaqohList.map((h) => (
+                        {mockHalaqohList.map((h) => (
                           <SelectItem key={h.id} value={h.nama_halaqoh}>
                             {h.nama_halaqoh}
                           </SelectItem>
@@ -245,7 +231,7 @@ const UjianTahfidz = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Semua Kelas</SelectItem>
-                        {kelasList.map((k) => (
+                        {mockKelasList.map((k) => (
                           <SelectItem key={k.id} value={k.nama_kelas}>
                             {k.nama_kelas}
                           </SelectItem>
@@ -309,7 +295,7 @@ const UjianTahfidz = () => {
                 {/* Materi Ujian - Juz Selection */}
                 <div className="space-y-4">
                   <Label className="text-base font-semibold">Materi Ujian (Juz)</Label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <JuzSelector
                       value={materiDari}
                       onValueChange={setMateriDari}
@@ -451,7 +437,7 @@ const UjianTahfidz = () => {
                         <div>
                           <p
                             className={`font-semibold ${
-                              isLulus() ? "text-green-800 dark:text-green-200" : "text-red-800 dark:text-red-200"
+                              isLulus() ? "text-green-700 dark:text-green-300" : "text-red-700 dark:text-red-300"
                             }`}
                           >
                             {isLulus() ? "LULUS" : "TIDAK LULUS"}
@@ -484,15 +470,15 @@ const UjianTahfidz = () => {
                   />
                 </div>
 
-                {/* Submit Button */}
-                <div className="flex gap-3 justify-end">
+                {/* Actions */}
+                <div className="flex justify-end gap-2 pt-4">
                   <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Batal
                   </Button>
                   <Button
                     onClick={handleSubmit}
-                    disabled={!selectedSantri || !selectedAsatidz || !tanggalUjian}
                     className="bg-purple-600 hover:bg-purple-700"
+                    disabled={!selectedSantri || !selectedAsatidz || !tanggalUjian}
                   >
                     Simpan Hasil Ujian
                   </Button>
@@ -502,32 +488,31 @@ const UjianTahfidz = () => {
           </Dialog>
         </div>
 
-        {/* History Table */}
+        {/* Riwayat Ujian */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg">Riwayat Ujian Tahfidz</CardTitle>
+            <CardTitle>Riwayat Ujian Tahfidz</CardTitle>
           </CardHeader>
           <CardContent>
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tanggal</TableHead>
                   <TableHead>Santri</TableHead>
+                  <TableHead>Tanggal</TableHead>
                   <TableHead>Materi</TableHead>
-                  <TableHead className="text-center">Nilai</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-center">Aksi</TableHead>
+                  <TableHead>Nilai</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {ujianHistory.map((ujian) => (
                   <TableRow key={ujian.id}>
-                    <TableCell>{ujian.tanggal}</TableCell>
                     <TableCell className="font-medium">{ujian.santri}</TableCell>
+                    <TableCell>{ujian.tanggal}</TableCell>
                     <TableCell>{ujian.materi}</TableCell>
-                    <TableCell className="text-center">
+                    <TableCell>
                       <Badge
-                        variant={ujian.nilaiTotal >= 70 ? "default" : "destructive"}
                         className={
                           ujian.nilaiTotal >= 70
                             ? "bg-green-600"
@@ -537,7 +522,7 @@ const UjianTahfidz = () => {
                         {ujian.nilaiTotal}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell>
                       <Badge
                         variant={ujian.status === "Lulus" ? "default" : "destructive"}
                         className={
@@ -549,9 +534,10 @@ const UjianTahfidz = () => {
                         {ujian.status}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-center">
-                      <Button variant="ghost" size="sm">
-                        <Eye className="w-4 h-4" />
+                    <TableCell>
+                      <Button variant="outline" size="sm">
+                        <Eye className="w-4 h-4 mr-1" />
+                        Detail
                       </Button>
                     </TableCell>
                   </TableRow>
