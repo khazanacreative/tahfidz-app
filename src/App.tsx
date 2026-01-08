@@ -34,6 +34,13 @@ import AkademikRapor from "./pages/AkademikRapor";
 // Profil & Pengaturan
 import Profil from "./pages/Profil";
 import Pengaturan from "./pages/Pengaturan";
+// Mobile Ustadz pages
+import AuthUstadz from "./pages/ustadz/AuthUstadz";
+import SetoranMobile from "./pages/ustadz/SetoranMobile";
+import DrillMobile from "./pages/ustadz/DrillMobile";
+import TasmiMobile from "./pages/ustadz/TasmiMobile";
+import TahfidzMobile from "./pages/ustadz/TahfidzMobile";
+import ProfilMobile from "./pages/ustadz/ProfilMobile";
 
 const queryClient = new QueryClient();
 
@@ -58,7 +65,7 @@ const App = () => (
             <Route path="/santri" element={<DataSantri />} />
             <Route path="/halaqoh" element={<DataHalaqoh />} />
             <Route path="/kelas" element={<DataKelas />} />
-            <Route path="/ustadz" element={<DataUstadz />} />
+            <Route path="/data-ustadz" element={<DataUstadz />} />
             <Route path="/users" element={<DataUsers />} />
             <Route path="/pengumuman" element={<PengumumanPage />} />
             {/* Tilawah Routes */}
@@ -74,6 +81,13 @@ const App = () => (
             {/* Profil & Pengaturan */}
             <Route path="/profil" element={<Profil />} />
             <Route path="/pengaturan" element={<Pengaturan />} />
+            {/* Mobile Ustadz Routes */}
+            <Route path="/ustadz" element={<AuthUstadz />} />
+            <Route path="/ustadz/setoran" element={<SetoranMobile />} />
+            <Route path="/ustadz/drill" element={<DrillMobile />} />
+            <Route path="/ustadz/tasmi" element={<TasmiMobile />} />
+            <Route path="/ustadz/tahfidz" element={<TahfidzMobile />} />
+            <Route path="/ustadz/profil" element={<ProfilMobile />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
