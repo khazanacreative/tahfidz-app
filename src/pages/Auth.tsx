@@ -297,7 +297,7 @@ export default function Auth() {
 
           <div className="mt-6 pt-4 border-t">
             <Link 
-              to="/ustadz/auth" 
+              to="/ustadz/login" 
               className="flex items-center justify-center gap-2 text-sm text-muted-foreground hover:text-primary transition-colors"
             >
               <Smartphone className="w-4 h-4" />
