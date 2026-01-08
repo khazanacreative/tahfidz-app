@@ -20,16 +20,8 @@ export function MobileLayout({ children }: MobileLayoutProps) {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="h-14 bg-gradient-to-r from-green-600 to-lime-500 px-4 flex items-center justify-center sticky top-0 z-50 shadow-md">
-        <div className="flex items-center gap-2">
-          <BookOpen className="w-6 h-6 text-white" />
-          <h1 className="text-lg font-bold text-white">MANTAF-IMIS</h1>
-        </div>
-      </header>
-
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pb-20">
+      <main className="flex-1 overflow-y-auto pb-20 pt-2">
         {children}
       </main>
 

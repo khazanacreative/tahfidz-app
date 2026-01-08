@@ -1,16 +1,13 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { MobileLayout } from "@/components/MobileLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Users, 
   BookOpen, 
-  GraduationCap,
-  ChevronRight,
-  Globe
+  GraduationCap
 } from "lucide-react";
 
 // Mock data - akan diganti dengan data dari Supabase
@@ -72,18 +69,6 @@ export default function DashboardMobile() {
             </div>
           </CardContent>
         </Card>
-
-        {/* Link to Web */}
-        <Link 
-          to="/auth" 
-          className="flex items-center justify-between p-3 bg-muted rounded-lg hover:bg-muted/80 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">Buka Web Admin</span>
-          </div>
-          <ChevronRight className="w-4 h-4 text-muted-foreground" />
-        </Link>
 
         {/* Halaqoh Section */}
         <div className="space-y-3">
