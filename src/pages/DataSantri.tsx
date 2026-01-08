@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,17 +19,21 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Plus, Search, Pencil, Trash2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 
-interface Halaqoh {
-  id: string;
-  nama_halaqoh: string;
-}
+// Mock data sementara
+const mockHalaqohList = [
+  { id: "1", nama_halaqoh: "Halaqoh Al-Azhary" },
+  { id: "2", nama_halaqoh: "Halaqoh Al-Furqon" },
+  { id: "3", nama_halaqoh: "Halaqoh Al-Hidayah" },
+];
 
-interface Kelas {
-  id: string;
-  nama_kelas: string;
-}
+const mockKelasList = [
+  { id: "1", nama_kelas: "KBTK A" },
+  { id: "2", nama_kelas: "KBTK B" },
+  { id: "3", nama_kelas: "Paket A Kelas 6" },
+  { id: "4", nama_kelas: "Paket B Kelas 8" },
+  { id: "5", nama_kelas: "Paket B Kelas 9" },
+];
 
 const mockSantri = [
   { id: "1", nis: "S001", nama: "Muhammad Faiz", halaqoh: "Halaqoh Al-Azhary", kelas: "Paket A Kelas 6", wali: "H. Abdullah", tanggalMasuk: "1/1/2024", status: "Aktif" },
@@ -44,20 +48,6 @@ export default function DataSantri() {
   const [search, setSearch] = useState("");
   const [filterHalaqoh, setFilterHalaqoh] = useState("all");
   const [filterKelas, setFilterKelas] = useState("all");
-  const [halaqohList, setHalaqohList] = useState<Halaqoh[]>([]);
-  const [kelasList, setKelasList] = useState<Kelas[]>([]);
-
-  useEffect(() => {
-    const fetchFilters = async () => {
-      const [halaqohRes, kelasRes] = await Promise.all([
-        supabase.from("halaqoh").select("id, nama_halaqoh").order("nama_halaqoh"),
-        supabase.from("kelas").select("id, nama_kelas").order("nama_kelas"),
-      ]);
-      if (halaqohRes.data) setHalaqohList(halaqohRes.data);
-      if (kelasRes.data) setKelasList(kelasRes.data);
-    };
-    fetchFilters();
-  }, []);
 
   const filteredSantri = mockSantri.filter((santri) => {
     const matchSearch = santri.nama.toLowerCase().includes(search.toLowerCase()) ||
@@ -95,7 +85,7 @@ export default function DataSantri() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua Halaqoh</SelectItem>
-                {halaqohList.map((h) => (
+                {mockHalaqohList.map((h) => (
                   <SelectItem key={h.id} value={h.nama_halaqoh}>
                     {h.nama_halaqoh}
                   </SelectItem>
@@ -108,7 +98,7 @@ export default function DataSantri() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Semua Kelas</SelectItem>
-                {kelasList.map((k) => (
+                {mockKelasList.map((k) => (
                   <SelectItem key={k.id} value={k.nama_kelas}>
                     {k.nama_kelas}
                   </SelectItem>

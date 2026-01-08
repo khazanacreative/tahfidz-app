@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +19,6 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, GraduationCap } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface Kelas {
@@ -29,34 +28,23 @@ interface Kelas {
   created_at: string;
 }
 
+// Mock data sementara - akan diganti dengan data dari database
+const mockKelasList: Kelas[] = [
+  { id: "1", nama_kelas: "KBTK A", deskripsi: "Kelas KBTK bagian A", created_at: "2024-01-01" },
+  { id: "2", nama_kelas: "KBTK B", deskripsi: "Kelas KBTK bagian B", created_at: "2024-01-01" },
+  { id: "3", nama_kelas: "Paket A Kelas 6", deskripsi: "Setara SD Kelas 6", created_at: "2024-01-01" },
+  { id: "4", nama_kelas: "Paket B Kelas 8", deskripsi: "Setara SMP Kelas 8", created_at: "2024-01-01" },
+  { id: "5", nama_kelas: "Paket B Kelas 9", deskripsi: "Setara SMP Kelas 9", created_at: "2024-01-01" },
+];
+
 export default function DataKelas() {
-  const [kelasList, setKelasList] = useState<Kelas[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [kelasList, setKelasList] = useState<Kelas[]>(mockKelasList);
+  const [isLoading] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedKelas, setSelectedKelas] = useState<Kelas | null>(null);
   const [namaKelas, setNamaKelas] = useState("");
   const [deskripsi, setDeskripsi] = useState("");
-
-  const fetchKelas = async () => {
-    setIsLoading(true);
-    const { data, error } = await supabase
-      .from("kelas")
-      .select("*")
-      .order("nama_kelas");
-
-    if (error) {
-      console.error("Error fetching kelas:", error);
-      toast.error("Gagal memuat data kelas");
-    } else {
-      setKelasList(data || []);
-    }
-    setIsLoading(false);
-  };
-
-  useEffect(() => {
-    fetchKelas();
-  }, []);
 
   const handleSubmit = async () => {
     if (!namaKelas.trim()) {
@@ -65,30 +53,21 @@ export default function DataKelas() {
     }
 
     if (isEditMode && selectedKelas) {
-      const { error } = await supabase
-        .from("kelas")
-        .update({ nama_kelas: namaKelas, deskripsi: deskripsi || null })
-        .eq("id", selectedKelas.id);
-
-      if (error) {
-        console.error("Error updating kelas:", error);
-        toast.error("Gagal mengupdate kelas");
-      } else {
-        toast.success("Kelas berhasil diupdate");
-        fetchKelas();
-      }
+      setKelasList(prev => prev.map(k => 
+        k.id === selectedKelas.id 
+          ? { ...k, nama_kelas: namaKelas, deskripsi: deskripsi || null }
+          : k
+      ));
+      toast.success("Kelas berhasil diupdate");
     } else {
-      const { error } = await supabase
-        .from("kelas")
-        .insert({ nama_kelas: namaKelas, deskripsi: deskripsi || null });
-
-      if (error) {
-        console.error("Error creating kelas:", error);
-        toast.error("Gagal menambah kelas");
-      } else {
-        toast.success("Kelas berhasil ditambahkan");
-        fetchKelas();
-      }
+      const newKelas: Kelas = {
+        id: Date.now().toString(),
+        nama_kelas: namaKelas,
+        deskripsi: deskripsi || null,
+        created_at: new Date().toISOString(),
+      };
+      setKelasList(prev => [...prev, newKelas]);
+      toast.success("Kelas berhasil ditambahkan");
     }
 
     resetForm();
@@ -105,16 +84,8 @@ export default function DataKelas() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Apakah Anda yakin ingin menghapus kelas ini?")) return;
-
-    const { error } = await supabase.from("kelas").delete().eq("id", id);
-
-    if (error) {
-      console.error("Error deleting kelas:", error);
-      toast.error("Gagal menghapus kelas");
-    } else {
-      toast.success("Kelas berhasil dihapus");
-      fetchKelas();
-    }
+    setKelasList(prev => prev.filter(k => k.id !== id));
+    toast.success("Kelas berhasil dihapus");
   };
 
   const resetForm = () => {
