@@ -28,7 +28,7 @@ export default function AuthUstadz() {
         .single();
 
       if (roles?.role === "asatidz") {
-        navigate("/ustadz/setoran", { replace: true });
+        navigate("/ustadz/dashboard", { replace: true });
       } else if (roles?.role === "wali_santri") {
         navigate("/ustadz/profil", { replace: true }); // Wali santri page
       } else if (roles?.role === "admin") {
