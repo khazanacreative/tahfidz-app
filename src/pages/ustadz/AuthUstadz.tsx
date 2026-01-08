@@ -20,15 +20,32 @@ export default function AuthUstadz() {
   const [loginData, setLoginData] = useState({ email: "", password: "" });
 
   useEffect(() => {
+    const checkUserRole = async (userId: string) => {
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .single();
+
+      if (roles?.role === "asatidz") {
+        navigate("/ustadz/setoran", { replace: true });
+      } else if (roles?.role === "wali_santri") {
+        navigate("/ustadz/profil", { replace: true }); // Wali santri page
+      } else if (roles?.role === "admin") {
+        toast.error("Akun admin tidak bisa login di aplikasi mobile");
+        await supabase.auth.signOut();
+      }
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
-        navigate("/ustadz/setoran", { replace: true });
+        checkUserRole(session.user.id);
       }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
-        navigate("/ustadz/setoran", { replace: true });
+        checkUserRole(session.user.id);
       }
     });
 
@@ -62,21 +79,21 @@ export default function AuthUstadz() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-green-600 via-green-500 to-lime-400 p-4">
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-emerald-600 via-teal-500 to-cyan-400 p-4">
       {/* Mobile App Badge */}
       <div className="flex items-center gap-2 mb-6 text-white/90">
         <Smartphone className="w-5 h-5" />
-        <span className="text-sm font-medium">Aplikasi Mobile Ustadz</span>
+        <span className="text-sm font-medium">Aplikasi Mobile</span>
       </div>
 
       <Card className="w-full max-w-sm shadow-2xl border-0">
         <CardHeader className="text-center space-y-4 pb-2">
-          <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-r from-green-500 to-lime-500 flex items-center justify-center shadow-lg">
+          <div className="mx-auto w-20 h-20 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg">
             <BookOpen className="w-10 h-10 text-white" />
           </div>
           <div>
             <CardTitle className="text-2xl font-bold">MANTAF-IMIS</CardTitle>
-            <CardDescription className="text-sm">Login Ustadz/Ustadzah</CardDescription>
+            <CardDescription className="text-sm">Login Ustadz / Wali Santri</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="pt-4">
@@ -107,18 +124,21 @@ export default function AuthUstadz() {
             </div>
             <Button 
               type="submit" 
-              className="w-full h-12 text-base bg-gradient-to-r from-green-600 to-lime-500 hover:from-green-700 hover:to-lime-600" 
+              className="w-full h-12 text-base bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600" 
               disabled={loading}
             >
               {loading ? "Memproses..." : "Masuk"}
             </Button>
           </form>
 
-          <div className="mt-6 p-3 bg-muted rounded-lg">
-            <p className="text-xs text-center text-muted-foreground">
-              Akses khusus untuk ustadz/ustadzah.<br />
-              Fitur: Input Setoran, Drill, Ujian Tasmi' & Tahfidz
+          <div className="mt-6 p-3 bg-muted rounded-lg space-y-2">
+            <p className="text-xs text-center text-muted-foreground font-medium">
+              Akun Demo:
             </p>
+            <div className="text-xs text-center text-muted-foreground space-y-1">
+              <p><strong>Ustadz:</strong> ustadz@mantaf.id / ustadz123</p>
+              <p><strong>Wali:</strong> wali@mantaf.id / wali123</p>
+            </div>
           </div>
         </CardContent>
       </Card>
