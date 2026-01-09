@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { MobileLayout } from "@/components/MobileLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -13,6 +13,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { Plus, BookOpen, CalendarIcon, CheckCircle, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { JuzSelector } from "@/components/JuzSelector";
+import { MobileFilters, FilterValues } from "@/components/MobileFilters";
 import { getSurahsByJuz, Surah } from "@/lib/quran-data";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -24,9 +25,9 @@ const mockSantri = [
 ];
 
 const mockSetoran = [
-  { id: 1, tanggal: "15/01/2025", santri: "Muhammad Faiz", juz: 30, nilai: 95, status: "Lancar" },
-  { id: 2, tanggal: "14/01/2025", santri: "Fatimah Zahra", juz: 30, nilai: 78, status: "Kurang" },
-  { id: 3, tanggal: "13/01/2025", santri: "Aisyah Nur", juz: 29, nilai: 92, status: "Lancar" },
+  { id: 1, tanggal: "15/01/2025", santri: "Muhammad Faiz", santriId: "1", halaqohId: "1", juz: 30, nilai: 95, status: "Lancar" },
+  { id: 2, tanggal: "14/01/2025", santri: "Fatimah Zahra", santriId: "2", halaqohId: "2", juz: 30, nilai: 78, status: "Kurang" },
+  { id: 3, tanggal: "13/01/2025", santri: "Aisyah Nur", santriId: "3", halaqohId: "1", juz: 29, nilai: 92, status: "Lancar" },
 ];
 
 const BATAS_LANCAR = 80;
@@ -41,21 +42,17 @@ export default function SetoranMobile() {
   const [ayatSampai, setAyatSampai] = useState("7");
   const [jumlahKesalahan, setJumlahKesalahan] = useState("0");
   const [catatanTajwid, setCatatanTajwid] = useState("");
+  const [filters, setFilters] = useState<FilterValues>({ periode: "all", halaqoh: "all", santri: "all" });
 
   const surahByJuz: Surah[] = useMemo(() => {
     if (!juz) return [];
     return getSurahsByJuz(Number(juz));
   }, [juz]);
 
-  const selectedSurah = useMemo(() => {
-    return surahByJuz.find(s => s.number === Number(surah));
-  }, [surah, surahByJuz]);
-
   const nilaiKelancaran = Math.max(0, 100 - parseInt(jumlahKesalahan || "0"));
-  const selectedSantriData = mockSantri.find(s => s.id === selectedSantri);
 
   const handleSubmit = () => {
-    if (!tanggalSetoran || !selectedSantriData) return;
+    if (!tanggalSetoran || !selectedSantri) return;
 
     toast.success(
       nilaiKelancaran >= BATAS_LANCAR
@@ -76,6 +73,12 @@ export default function SetoranMobile() {
     setJumlahKesalahan("0");
     setCatatanTajwid("");
   };
+
+  const filteredSetoran = mockSetoran.filter(item => {
+    if (filters.santri !== "all" && item.santriId !== filters.santri) return false;
+    if (filters.halaqoh !== "all" && item.halaqohId !== filters.halaqoh) return false;
+    return true;
+  });
 
   return (
     <MobileLayout>
@@ -237,10 +240,13 @@ export default function SetoranMobile() {
           </DialogContent>
         </Dialog>
 
+        {/* Filters */}
+        <MobileFilters onFilterChange={setFilters} />
+
         {/* Recent Setoran List */}
         <div className="space-y-3">
           <h3 className="font-semibold text-sm text-muted-foreground">Setoran Terbaru</h3>
-          {mockSetoran.map((setoran) => (
+          {filteredSetoran.map((setoran) => (
             <Card key={setoran.id}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">

@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
-import { Home, BookOpen, Target, Award, User } from "lucide-react";
+import { Home, BookOpen, Target, Award, GraduationCap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface MobileLayoutProps {
@@ -12,7 +12,7 @@ const navItems = [
   { path: "/ustadz/setoran", label: "Setoran", icon: BookOpen },
   { path: "/ustadz/drill", label: "Drill", icon: Target },
   { path: "/ustadz/tasmi", label: "Tasmi'", icon: Award },
-  { path: "/ustadz/profil", label: "Profil", icon: User },
+  { path: "/ustadz/tahfidz", label: "Ujian", icon: GraduationCap },
 ];
 
 export function MobileLayout({ children }: MobileLayoutProps) {

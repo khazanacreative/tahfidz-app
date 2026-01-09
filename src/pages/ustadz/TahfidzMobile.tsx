@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, GraduationCap, CheckCircle2, XCircle, ChevronUp, ChevronDown, Info } from "lucide-react";
 import { toast } from "sonner";
 import { JuzSelector } from "@/components/JuzSelector";
+import { MobileFilters, FilterValues } from "@/components/MobileFilters";
 import {
   Accordion,
   AccordionContent,
@@ -25,9 +26,9 @@ const mockSantri = [
 ];
 
 const mockHistory = [
-  { id: 1, tanggal: "15/01/2025", santri: "Muhammad Faiz", materi: "Juz 1-2", nilai: 85, lulus: true },
-  { id: 2, tanggal: "14/01/2025", santri: "Fatimah Zahra", materi: "Juz 1-2", nilai: 65, lulus: false },
-  { id: 3, tanggal: "13/01/2025", santri: "Aisyah Nur", materi: "Juz 1-3", nilai: 78, lulus: true },
+  { id: 1, tanggal: "15/01/2025", santri: "Muhammad Faiz", santriId: "1", halaqohId: "1", materi: "Juz 1-2", nilai: 85, lulus: true },
+  { id: 2, tanggal: "14/01/2025", santri: "Fatimah Zahra", santriId: "2", halaqohId: "2", materi: "Juz 1-2", nilai: 65, lulus: false },
+  { id: 3, tanggal: "13/01/2025", santri: "Aisyah Nur", santriId: "3", halaqohId: "1", materi: "Juz 1-3", nilai: 78, lulus: true },
 ];
 
 const KKM = 70;
@@ -46,6 +47,7 @@ export default function TahfidzMobile() {
   const [soalData, setSoalData] = useState<SoalData[]>(
     Array.from({ length: 10 }, () => ({ halaman: "", pengurangan: 0 }))
   );
+  const [filters, setFilters] = useState<FilterValues>({ periode: "all", halaqoh: "all", santri: "all" });
 
   const getNilaiSoal = (index: number) => 10 - soalData[index].pengurangan;
   const getTotalNilai = () => soalData.reduce((total, soal) => total + (10 - soal.pengurangan), 0);
@@ -82,6 +84,12 @@ export default function TahfidzMobile() {
     setCatatan("");
     setSoalData(Array.from({ length: 10 }, () => ({ halaman: "", pengurangan: 0 })));
   };
+
+  const filteredHistory = mockHistory.filter(item => {
+    if (filters.santri !== "all" && item.santriId !== filters.santri) return false;
+    if (filters.halaqoh !== "all" && item.halaqohId !== filters.halaqoh) return false;
+    return true;
+  });
 
   return (
     <MobileLayout>
@@ -262,10 +270,13 @@ export default function TahfidzMobile() {
           </DialogContent>
         </Dialog>
 
+        {/* Filters */}
+        <MobileFilters onFilterChange={setFilters} />
+
         {/* Recent History */}
         <div className="space-y-3">
           <h3 className="font-semibold text-sm text-muted-foreground">Riwayat Ujian</h3>
-          {mockHistory.map((ujian) => (
+          {filteredHistory.map((ujian) => (
             <Card key={ujian.id}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">

@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { MobileLayout } from "@/components/MobileLayout";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -10,9 +10,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { Plus, Target, CalendarIcon, CheckCircle, XCircle, Lock } from "lucide-react";
+import { Plus, Target, CalendarIcon, CheckCircle, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { JuzSelector } from "@/components/JuzSelector";
+import { MobileFilters, FilterValues } from "@/components/MobileFilters";
 import { getSurahsByJuz, Surah } from "@/lib/quran-data";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -24,9 +25,9 @@ const mockSantri = [
 ];
 
 const mockDrillHistory = [
-  { id: 1, tanggal: "15/01/2025", santri: "Muhammad Faiz", juz: 30, level: "Drill 1", nilai: 95, lulus: true },
-  { id: 2, tanggal: "14/01/2025", santri: "Fatimah Zahra", juz: 30, level: "Drill 1", nilai: 85, lulus: false },
-  { id: 3, tanggal: "13/01/2025", santri: "Aisyah Nur", juz: 29, level: "Drill 2", nilai: 92, lulus: true },
+  { id: 1, tanggal: "15/01/2025", santri: "Muhammad Faiz", santriId: "1", halaqohId: "1", juz: 30, level: "Drill 1", nilai: 95, lulus: true },
+  { id: 2, tanggal: "14/01/2025", santri: "Fatimah Zahra", santriId: "2", halaqohId: "2", juz: 30, level: "Drill 1", nilai: 85, lulus: false },
+  { id: 3, tanggal: "13/01/2025", santri: "Aisyah Nur", santriId: "3", halaqohId: "1", juz: 29, level: "Drill 2", nilai: 92, lulus: true },
 ];
 
 const drillLevels = [
@@ -47,10 +48,9 @@ export default function DrillMobile() {
   const [juz, setJuz] = useState("");
   const [drillLevel, setDrillLevel] = useState("");
   const [surah, setSurah] = useState("");
-  const [ayatDari, setAyatDari] = useState("1");
-  const [ayatSampai, setAyatSampai] = useState("7");
   const [jumlahKesalahan, setJumlahKesalahan] = useState("0");
   const [catatanTajwid, setCatatanTajwid] = useState("");
+  const [filters, setFilters] = useState<FilterValues>({ periode: "all", halaqoh: "all", santri: "all" });
 
   const surahByJuz: Surah[] = useMemo(() => {
     if (!juz) return [];
@@ -78,11 +78,15 @@ export default function DrillMobile() {
     setJuz("");
     setDrillLevel("");
     setSurah("");
-    setAyatDari("1");
-    setAyatSampai("7");
     setJumlahKesalahan("0");
     setCatatanTajwid("");
   };
+
+  const filteredHistory = mockDrillHistory.filter(item => {
+    if (filters.santri !== "all" && item.santriId !== filters.santri) return false;
+    if (filters.halaqoh !== "all" && item.halaqohId !== filters.halaqoh) return false;
+    return true;
+  });
 
   return (
     <MobileLayout>
@@ -256,10 +260,13 @@ export default function DrillMobile() {
           </DialogContent>
         </Dialog>
 
+        {/* Filters */}
+        <MobileFilters onFilterChange={setFilters} />
+
         {/* Recent Drill List */}
         <div className="space-y-3">
           <h3 className="font-semibold text-sm text-muted-foreground">Riwayat Drill</h3>
-          {mockDrillHistory.map((drill) => (
+          {filteredHistory.map((drill) => (
             <Card key={drill.id}>
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
