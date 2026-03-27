@@ -1,134 +1,44 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Save, RefreshCw } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-
-type Santri = { id: string; nama_santri: string; nis: string; id_kelas: string | null };
-type Mapel = { id: string; nama: string; jenjang: string; kategori: string; kkm: number | null };
-type Komponen = { id: string; nama_komponen: string; jenis: string; kelas: string | null };
-type TahunAjaran = { id: string; nama: string; semester: string; aktif: boolean | null };
+import { MOCK_TAHUN_AJARAN, MOCK_MAPEL, MOCK_KOMPONEN_NILAI, MOCK_KELAS_AKADEMIK, getSantriByKelas } from "@/lib/mock-akademik-data";
 
 export default function AkademikInputNilai() {
-  const [mapelList, setMapelList] = useState<Mapel[]>([]);
-  const [santriList, setSantriList] = useState<Santri[]>([]);
-  const [komponenList, setKomponenList] = useState<Komponen[]>([]);
-  const [tahunAjaranList, setTahunAjaranList] = useState<TahunAjaran[]>([]);
-  const [kelasList, setKelasList] = useState<{ id: string; nama_kelas: string }[]>([]);
-
   const [selectedMapel, setSelectedMapel] = useState("");
   const [selectedKelas, setSelectedKelas] = useState("");
-  const [selectedTa, setSelectedTa] = useState("");
+  const [selectedTa, setSelectedTa] = useState(MOCK_TAHUN_AJARAN.find(t => t.aktif)?.id || "");
   const [filterJenjang, setFilterJenjang] = useState("SMP");
-
-  // nilaiMap: { [santriId_komponenId]: { value: number|null, dirty: boolean, dbId?: string } }
-  const [nilaiMap, setNilaiMap] = useState<Record<string, { value: number | null; dirty: boolean; dbId?: string }>>({});
-  const [loading, setLoading] = useState(false);
+  const [nilaiMap, setNilaiMap] = useState<Record<string, { value: number | null; dirty: boolean }>>({});
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    loadInitialData();
-  }, []);
-
-  const loadInitialData = async () => {
-    const [mapelRes, taRes, kelasRes] = await Promise.all([
-      supabase.from("mata_pelajaran").select("*").eq("aktif", true).order("urutan"),
-      supabase.from("tahun_ajaran").select("*").order("created_at", { ascending: false }),
-      supabase.from("kelas").select("id, nama_kelas").order("nama_kelas"),
-    ]);
-    if (mapelRes.data) setMapelList(mapelRes.data as Mapel[]);
-    if (taRes.data) {
-      setTahunAjaranList(taRes.data as TahunAjaran[]);
-      const aktif = (taRes.data as TahunAjaran[]).find(t => t.aktif);
-      if (aktif) setSelectedTa(aktif.id);
-    }
-    if (kelasRes.data) setKelasList(kelasRes.data);
-  };
-
-  const loadNilai = useCallback(async () => {
-    if (!selectedMapel || !selectedKelas || !selectedTa) return;
-    setLoading(true);
-
-    // Fetch santri for this class
-    const { data: santriData } = await supabase.from("santri").select("id, nama_santri, nis, id_kelas")
-      .eq("id_kelas", selectedKelas).eq("status", "Aktif").order("nama_santri");
-    if (santriData) setSantriList(santriData);
-
-    // Fetch komponen for this mapel
-    const { data: kompData } = await supabase.from("komponen_nilai").select("*")
-      .eq("id_mapel", selectedMapel).order("urutan");
-    if (kompData) setKomponenList(kompData as Komponen[]);
-
-    // Fetch existing grades
-    if (santriData && kompData) {
-      const santriIds = santriData.map(s => s.id);
-      const kompIds = (kompData as Komponen[]).map(k => k.id);
-      
-      if (santriIds.length > 0 && kompIds.length > 0) {
-        const { data: nilaiData } = await supabase.from("nilai_akademik").select("*")
-          .in("id_santri", santriIds).in("id_komponen", kompIds).eq("id_tahun_ajaran", selectedTa);
-        
-        const map: Record<string, { value: number | null; dirty: boolean; dbId?: string }> = {};
-        if (nilaiData) {
-          nilaiData.forEach((n: any) => {
-            const key = `${n.id_santri}_${n.id_komponen}`;
-            map[key] = { value: n.nilai !== null ? Number(n.nilai) : null, dirty: false, dbId: n.id };
-          });
-        }
-        setNilaiMap(map);
-      } else {
-        setNilaiMap({});
-      }
-    }
-    setLoading(false);
-  }, [selectedMapel, selectedKelas, selectedTa]);
-
-  useEffect(() => {
-    if (selectedMapel && selectedKelas && selectedTa) loadNilai();
-  }, [selectedMapel, selectedKelas, selectedTa, loadNilai]);
+  const santriList = useMemo(() => selectedKelas ? getSantriByKelas(selectedKelas) : [], [selectedKelas]);
+  const komponenList = useMemo(() => MOCK_KOMPONEN_NILAI.filter(k => k.id_mapel === selectedMapel), [selectedMapel]);
+  const filteredMapelList = MOCK_MAPEL.filter(m => m.jenjang === filterJenjang && m.aktif);
 
   const handleNilaiChange = (santriId: string, komponenId: string, value: string) => {
     const key = `${santriId}_${komponenId}`;
     const numVal = value === "" ? null : Number(value);
-    setNilaiMap(prev => ({
-      ...prev,
-      [key]: { ...prev[key], value: numVal, dirty: true, dbId: prev[key]?.dbId },
-    }));
+    setNilaiMap(prev => ({ ...prev, [key]: { value: numVal, dirty: true } }));
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     setSaving(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    const dirtyEntries = Object.entries(nilaiMap).filter(([, v]) => v.dirty);
-
-    const upsertData = dirtyEntries.map(([key, v]) => {
-      const [id_santri, id_komponen] = key.split("_");
-      return {
-        ...(v.dbId ? { id: v.dbId } : {}),
-        id_santri,
-        id_komponen,
-        id_tahun_ajaran: selectedTa,
-        nilai: v.value,
-        id_guru: user?.id || null,
-      };
-    });
-
-    if (upsertData.length === 0) { toast.info("Tidak ada perubahan"); setSaving(false); return; }
-
-    const { error } = await supabase.from("nilai_akademik").upsert(upsertData as any, { onConflict: "id_santri,id_komponen,id_tahun_ajaran" });
-    if (error) {
-      toast.error("Gagal menyimpan nilai: " + error.message);
-    } else {
-      toast.success(`${upsertData.length} nilai berhasil disimpan`);
-      loadNilai();
-    }
-    setSaving(false);
+    const dirtyCount = Object.values(nilaiMap).filter(v => v.dirty).length;
+    setTimeout(() => {
+      setNilaiMap(prev => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach(k => { updated[k] = { ...updated[k], dirty: false }; });
+        return updated;
+      });
+      toast.success(`${dirtyCount} nilai berhasil disimpan`);
+      setSaving(false);
+    }, 300);
   };
 
   const getAverage = (santriId: string): string => {
@@ -136,8 +46,6 @@ export default function AkademikInputNilai() {
     if (values.length === 0) return "-";
     return (values.reduce((a, b) => a + b, 0) / values.length).toFixed(1);
   };
-
-  const filteredMapelList = mapelList.filter(m => m.jenjang === filterJenjang);
 
   return (
     <Layout>
@@ -148,12 +56,10 @@ export default function AkademikInputNilai() {
             <p className="text-muted-foreground text-sm mt-1">Input nilai per mata pelajaran per kelas</p>
           </div>
           <Button onClick={handleSave} disabled={saving || !Object.values(nilaiMap).some(v => v.dirty)}>
-            <Save className="w-4 h-4 mr-1" />
-            {saving ? "Menyimpan..." : "Simpan Nilai"}
+            <Save className="w-4 h-4 mr-1" />{saving ? "Menyimpan..." : "Simpan Nilai"}
           </Button>
         </div>
 
-        {/* Filters */}
         <Card>
           <CardContent className="pt-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -161,64 +67,44 @@ export default function AkademikInputNilai() {
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Tahun Ajaran</label>
                 <Select value={selectedTa} onValueChange={setSelectedTa}>
                   <SelectTrigger><SelectValue placeholder="Pilih TA" /></SelectTrigger>
-                  <SelectContent>
-                    {tahunAjaranList.map(ta => (
-                      <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>
-                    ))}
-                  </SelectContent>
+                  <SelectContent>{MOCK_TAHUN_AJARAN.map(ta => <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Jenjang</label>
                 <Select value={filterJenjang} onValueChange={v => { setFilterJenjang(v); setSelectedMapel(""); }}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="TK">TK</SelectItem>
-                    <SelectItem value="SD">SD</SelectItem>
-                    <SelectItem value="SMP">SMP</SelectItem>
-                  </SelectContent>
+                  <SelectContent><SelectItem value="TK">TK</SelectItem><SelectItem value="SD">SD</SelectItem><SelectItem value="SMP">SMP</SelectItem></SelectContent>
                 </Select>
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Kelas</label>
                 <Select value={selectedKelas} onValueChange={setSelectedKelas}>
                   <SelectTrigger><SelectValue placeholder="Pilih Kelas" /></SelectTrigger>
-                  <SelectContent>
-                    {kelasList.map(k => <SelectItem key={k.id} value={k.id}>{k.nama_kelas}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{MOCK_KELAS_AKADEMIK.map(k => <SelectItem key={k.id} value={k.id}>{k.nama_kelas}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1 block">Mata Pelajaran</label>
                 <Select value={selectedMapel} onValueChange={setSelectedMapel}>
                   <SelectTrigger><SelectValue placeholder="Pilih Mapel" /></SelectTrigger>
-                  <SelectContent>
-                    {filteredMapelList.map(m => <SelectItem key={m.id} value={m.id}>{m.nama}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{filteredMapelList.map(m => <SelectItem key={m.id} value={m.id}>{m.nama}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Grade Table */}
         {selectedMapel && selectedKelas && selectedTa && (
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base">
-                  {mapelList.find(m => m.id === selectedMapel)?.nama} — {santriList.length} siswa, {komponenList.length} komponen
-                </CardTitle>
-                <Button variant="ghost" size="sm" onClick={loadNilai}><RefreshCw className="w-4 h-4" /></Button>
-              </div>
+              <CardTitle className="text-base">
+                {MOCK_MAPEL.find(m => m.id === selectedMapel)?.nama} — {santriList.length} siswa, {komponenList.length} komponen
+              </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {loading ? (
-                <div className="text-center py-12 text-muted-foreground">Memuat data...</div>
-              ) : komponenList.length === 0 ? (
-                <div className="text-center py-12 text-muted-foreground">
-                  Belum ada komponen penilaian untuk mapel ini. Silakan tambahkan di halaman Kurikulum.
-                </div>
+              {komponenList.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">Belum ada komponen penilaian untuk mapel ini.</div>
               ) : (
                 <div className="overflow-x-auto">
                   <Table>
@@ -246,14 +132,9 @@ export default function AkademikInputNilai() {
                             const isDirty = nilaiMap[key]?.dirty;
                             return (
                               <TableCell key={k.id} className="p-1">
-                                <Input
-                                  type="number"
-                                  min={0}
-                                  max={100}
+                                <Input type="number" min={0} max={100}
                                   className={`w-16 h-8 text-center text-sm p-1 ${isDirty ? "border-primary ring-1 ring-primary/30" : ""}`}
-                                  value={val ?? ""}
-                                  onChange={e => handleNilaiChange(s.id, k.id, e.target.value)}
-                                />
+                                  value={val ?? ""} onChange={e => handleNilaiChange(s.id, k.id, e.target.value)} />
                               </TableCell>
                             );
                           })}
