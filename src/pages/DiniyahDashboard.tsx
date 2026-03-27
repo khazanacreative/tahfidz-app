@@ -1,91 +1,73 @@
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, BookOpen, Star, TrendingUp, Heart, ClipboardCheck } from "lucide-react";
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useMemo } from "react";
+import { MOCK_SANTRI_AKADEMIK, MOCK_MAPEL, MOCK_KOMPONEN_NILAI, generateMockNilai } from "@/lib/mock-akademik-data";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
 export default function DiniyahDashboard() {
-  const [stats, setStats] = useState({
-    totalSantri: 0, totalMapel: 0, totalNilai: 0, avgNilai: 0,
-    totalPembiasaan: 0, totalIbadah: 0,
+  const mockNilai = useMemo(() => generateMockNilai(), []);
+  
+  const agamaMapel = MOCK_MAPEL.filter(m => m.kategori === "Agama");
+  const agamaKomponen = MOCK_KOMPONEN_NILAI.filter(k => {
+    const mapel = MOCK_MAPEL.find(m => m.id === k.id_mapel);
+    return mapel && mapel.kategori === "Agama";
   });
-  const [nilaiPerMapel, setNilaiPerMapel] = useState<{ nama: string; rataRata: number }[]>([]);
-  const [distribusiNilai, setDistribusiNilai] = useState<{ name: string; value: number }[]>([]);
-  const [pembiasaanSummary, setPembiasaanSummary] = useState<{ name: string; value: number }[]>([]);
 
-  useEffect(() => {
-    loadStats();
+  // Filter only agama values
+  const agamaNilaiEntries = Object.entries(mockNilai).filter(([key]) => {
+    const komponenId = key.split("_")[1];
+    return agamaKomponen.some(k => k.id === komponenId);
+  });
+  const totalNilai = agamaNilaiEntries.length;
+  const avgNilai = totalNilai > 0 ? Math.round(agamaNilaiEntries.reduce((s, [, v]) => s + v, 0) / totalNilai * 10) / 10 : 0;
+
+  const nilaiPerMapel = useMemo(() => {
+    const mapelMap: Record<string, { total: number; count: number }> = {};
+    agamaNilaiEntries.forEach(([key, nilai]) => {
+      const komponenId = key.split("_")[1];
+      const komponen = MOCK_KOMPONEN_NILAI.find(k => k.id === komponenId);
+      if (!komponen) return;
+      const mapel = MOCK_MAPEL.find(m => m.id === komponen.id_mapel);
+      if (!mapel) return;
+      if (!mapelMap[mapel.nama]) mapelMap[mapel.nama] = { total: 0, count: 0 };
+      mapelMap[mapel.nama].total += nilai;
+      mapelMap[mapel.nama].count += 1;
+    });
+    return Object.entries(mapelMap).map(([nama, v]) => ({
+      nama,
+      rataRata: Math.round(v.total / v.count * 10) / 10,
+    })).sort((a, b) => b.rataRata - a.rataRata);
   }, []);
 
-  const loadStats = async () => {
-    const [santriRes, mapelRes, nilaiRes, pembiasaanRes, ibadahRes] = await Promise.all([
-      supabase.from("santri").select("id", { count: "exact" }).eq("status", "Aktif"),
-      supabase.from("mata_pelajaran").select("id, nama", { count: "exact" }).eq("kategori", "Agama").eq("aktif", true),
-      supabase.from("nilai_akademik").select("nilai, komponen_nilai!inner(mata_pelajaran!inner(nama, kategori))").not("nilai", "is", null),
-      supabase.from("pembiasaan").select("id, nilai", { count: "exact" }),
-      supabase.from("keterampilan_ibadah").select("id, nilai", { count: "exact" }),
-    ]);
-
-    const totalSantri = santriRes.count || 0;
-    const totalMapel = mapelRes.count || 0;
-    const totalPembiasaan = pembiasaanRes.count || 0;
-    const totalIbadah = ibadahRes.count || 0;
-
-    const diniyahNilai = (nilaiRes.data || []).filter((n: any) => n.komponen_nilai?.mata_pelajaran?.kategori === "Agama");
-    const totalNilai = diniyahNilai.length;
-    const avgNilai = totalNilai > 0
-      ? Math.round(diniyahNilai.reduce((sum: number, n: any) => sum + Number(n.nilai || 0), 0) / totalNilai * 10) / 10
-      : 0;
-
-    setStats({ totalSantri, totalMapel, totalNilai, avgNilai, totalPembiasaan, totalIbadah });
-
-    // Rata-rata per mapel diniyah
-    const mapelMap: Record<string, { total: number; count: number }> = {};
-    diniyahNilai.forEach((n: any) => {
-      const nama = n.komponen_nilai?.mata_pelajaran?.nama || "Unknown";
-      if (!mapelMap[nama]) mapelMap[nama] = { total: 0, count: 0 };
-      mapelMap[nama].total += Number(n.nilai || 0);
-      mapelMap[nama].count += 1;
-    });
-    setNilaiPerMapel(
-      Object.entries(mapelMap).map(([nama, v]) => ({
-        nama,
-        rataRata: Math.round(v.total / v.count * 10) / 10,
-      })).sort((a, b) => b.rataRata - a.rataRata)
-    );
-
-    // Distribusi nilai
+  const distribusiNilai = useMemo(() => {
     const ranges = { "90-100": 0, "80-89": 0, "70-79": 0, "60-69": 0, "<60": 0 };
-    diniyahNilai.forEach((n: any) => {
-      const v = Number(n.nilai || 0);
+    agamaNilaiEntries.forEach(([, v]) => {
       if (v >= 90) ranges["90-100"]++;
       else if (v >= 80) ranges["80-89"]++;
       else if (v >= 70) ranges["70-79"]++;
       else if (v >= 60) ranges["60-69"]++;
       else ranges["<60"]++;
     });
-    setDistribusiNilai(Object.entries(ranges).map(([name, value]) => ({ name, value })));
+    return Object.entries(ranges).map(([name, value]) => ({ name, value }));
+  }, []);
 
-    // Pembiasaan summary
-    const pembiasaanCounts = { A: 0, B: 0, C: 0, D: 0 };
-    (pembiasaanRes.data || []).forEach((p: any) => {
-      if (p.nilai && pembiasaanCounts.hasOwnProperty(p.nilai)) {
-        pembiasaanCounts[p.nilai as keyof typeof pembiasaanCounts]++;
-      }
-    });
-    setPembiasaanSummary(Object.entries(pembiasaanCounts).map(([name, value]) => ({ name, value })));
-  };
+  const pembiasaanSummary = [
+    { name: "A", value: 15 },
+    { name: "B", value: 8 },
+    { name: "C", value: 3 },
+    { name: "D", value: 1 },
+  ];
 
   const statCards = [
-    { title: "Total Santri Aktif", value: stats.totalSantri, desc: "Santri terdaftar", icon: Users, color: "text-blue-500" },
-    { title: "Mapel Diniyah", value: stats.totalMapel, desc: "Mapel agama aktif", icon: BookOpen, color: "text-green-500" },
-    { title: "Data Nilai", value: stats.totalNilai, desc: "Nilai terinput", icon: Star, color: "text-orange-500" },
-    { title: "Rata-rata Nilai", value: stats.avgNilai || "-", desc: "Semua mapel diniyah", icon: TrendingUp, color: "text-purple-500" },
-    { title: "Data Pembiasaan", value: stats.totalPembiasaan, desc: "Record pembiasaan", icon: Heart, color: "text-pink-500" },
-    { title: "Keterampilan Ibadah", value: stats.totalIbadah, desc: "Record ibadah", icon: ClipboardCheck, color: "text-cyan-500" },
+    { title: "Total Santri Aktif", value: MOCK_SANTRI_AKADEMIK.filter(s => s.status === "Aktif").length, desc: "Santri terdaftar", icon: Users, color: "text-blue-500" },
+    { title: "Mapel Diniyah", value: agamaMapel.length, desc: "Mapel agama aktif", icon: BookOpen, color: "text-green-500" },
+    { title: "Data Nilai", value: totalNilai, desc: "Nilai terinput", icon: Star, color: "text-orange-500" },
+    { title: "Rata-rata Nilai", value: avgNilai || "-", desc: "Semua mapel diniyah", icon: TrendingUp, color: "text-purple-500" },
+    { title: "Data Pembiasaan", value: 27, desc: "Record pembiasaan", icon: Heart, color: "text-pink-500" },
+    { title: "Keterampilan Ibadah", value: 20, desc: "Record ibadah", icon: ClipboardCheck, color: "text-cyan-500" },
   ];
 
   return (
@@ -113,9 +95,7 @@ export default function DiniyahDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Rata-rata Nilai per Mapel Diniyah</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Rata-rata Nilai per Mapel Diniyah</CardTitle></CardHeader>
             <CardContent>
               {nilaiPerMapel.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
@@ -134,9 +114,7 @@ export default function DiniyahDashboard() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Distribusi Nilai Diniyah</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Distribusi Nilai Diniyah</CardTitle></CardHeader>
             <CardContent>
               {distribusiNilai.some(d => d.value > 0) ? (
                 <ResponsiveContainer width="100%" height={300}>
@@ -157,22 +135,16 @@ export default function DiniyahDashboard() {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Distribusi Nilai Pembiasaan</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">Distribusi Nilai Pembiasaan</CardTitle></CardHeader>
           <CardContent>
-            {pembiasaanSummary.some(p => p.value > 0) ? (
-              <div className="grid grid-cols-4 gap-4">
-                {pembiasaanSummary.map((p) => (
-                  <div key={p.name} className="text-center p-4 rounded-lg bg-muted/50">
-                    <div className="text-3xl font-bold text-primary">{p.value}</div>
-                    <p className="text-sm text-muted-foreground mt-1">Predikat {p.name}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-center py-8">Belum ada data pembiasaan</p>
-            )}
+            <div className="grid grid-cols-4 gap-4">
+              {pembiasaanSummary.map((p) => (
+                <div key={p.name} className="text-center p-4 rounded-lg bg-muted/50">
+                  <div className="text-3xl font-bold text-primary">{p.value}</div>
+                  <p className="text-sm text-muted-foreground mt-1">Predikat {p.name}</p>
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -1,94 +1,68 @@
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, FileText, TrendingUp, Upload, BookOpen, ClipboardCheck, Trophy, Award } from "lucide-react";
-import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { Users, BookOpen, FileText, TrendingUp, ClipboardCheck, Trophy } from "lucide-react";
+import { useMemo } from "react";
+import { MOCK_SANTRI_AKADEMIK, MOCK_MAPEL, MOCK_KOMPONEN_NILAI, MOCK_EKSKUL, generateMockNilai } from "@/lib/mock-akademik-data";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
 
 export default function AkademikDashboard() {
-  const [stats, setStats] = useState({
-    totalSantri: 0,
-    totalMapel: 0,
-    totalNilai: 0,
-    avgNilai: 0,
-    totalKomponen: 0,
-    totalEkskul: 0,
+  const mockNilai = useMemo(() => generateMockNilai(), []);
+  
+  const umumMapel = MOCK_MAPEL.filter(m => m.kategori === "Umum" && m.jenjang === "SMP");
+  const umumKomponen = MOCK_KOMPONEN_NILAI.filter(k => {
+    const mapel = MOCK_MAPEL.find(m => m.id === k.id_mapel);
+    return mapel && mapel.kategori === "Umum";
   });
-  const [nilaiPerMapel, setNilaiPerMapel] = useState<{ nama: string; rataRata: number }[]>([]);
-  const [distribusiNilai, setDistribusiNilai] = useState<{ name: string; value: number }[]>([]);
-  const [recentActivity, setRecentActivity] = useState<{ mapel: string; santri: number; waktu: string }[]>([]);
+  
+  const allNilaiValues = Object.values(mockNilai);
+  const totalNilai = allNilaiValues.length;
+  const avgNilai = totalNilai > 0 ? Math.round(allNilaiValues.reduce((a, b) => a + b, 0) / totalNilai * 10) / 10 : 0;
 
-  useEffect(() => {
-    loadStats();
-  }, []);
-
-  const loadStats = async () => {
-    const [santriRes, mapelRes, nilaiRes, komponenRes, ekskulRes] = await Promise.all([
-      supabase.from("santri").select("id", { count: "exact" }).eq("status", "Aktif"),
-      supabase.from("mata_pelajaran").select("id, nama", { count: "exact" }).eq("kategori", "Umum").eq("aktif", true),
-      supabase.from("nilai_akademik").select("nilai, id_komponen, id_santri, komponen_nilai!inner(mata_pelajaran!inner(nama, kategori))").not("nilai", "is", null),
-      supabase.from("komponen_nilai").select("id", { count: "exact" }),
-      supabase.from("ekstrakurikuler").select("id", { count: "exact" }).eq("aktif", true),
-    ]);
-
-    const totalSantri = santriRes.count || 0;
-    const totalMapel = mapelRes.count || 0;
-    const totalKomponen = komponenRes.count || 0;
-    const totalEkskul = ekskulRes.count || 0;
-
-    // Filter only Umum category
-    const umumNilai = (nilaiRes.data || []).filter((n: any) => n.komponen_nilai?.mata_pelajaran?.kategori === "Umum");
-    const totalNilai = umumNilai.length;
-    const avgNilai = totalNilai > 0
-      ? Math.round(umumNilai.reduce((sum: number, n: any) => sum + Number(n.nilai || 0), 0) / totalNilai * 10) / 10
-      : 0;
-
-    setStats({ totalSantri, totalMapel, totalNilai, avgNilai, totalKomponen, totalEkskul });
-
-    // Rata-rata per mapel
+  const nilaiPerMapel = useMemo(() => {
     const mapelMap: Record<string, { total: number; count: number }> = {};
-    umumNilai.forEach((n: any) => {
-      const nama = n.komponen_nilai?.mata_pelajaran?.nama || "Unknown";
-      if (!mapelMap[nama]) mapelMap[nama] = { total: 0, count: 0 };
-      mapelMap[nama].total += Number(n.nilai || 0);
-      mapelMap[nama].count += 1;
+    Object.entries(mockNilai).forEach(([key, nilai]) => {
+      const komponenId = key.split("_")[1];
+      const komponen = MOCK_KOMPONEN_NILAI.find(k => k.id === komponenId);
+      if (!komponen) return;
+      const mapel = MOCK_MAPEL.find(m => m.id === komponen.id_mapel);
+      if (!mapel || mapel.kategori !== "Umum") return;
+      if (!mapelMap[mapel.nama]) mapelMap[mapel.nama] = { total: 0, count: 0 };
+      mapelMap[mapel.nama].total += nilai;
+      mapelMap[mapel.nama].count += 1;
     });
-    const perMapel = Object.entries(mapelMap).map(([nama, v]) => ({
+    return Object.entries(mapelMap).map(([nama, v]) => ({
       nama,
       rataRata: Math.round(v.total / v.count * 10) / 10,
-    })).sort((a, b) => b.rataRata - a.rataRata).slice(0, 8);
-    setNilaiPerMapel(perMapel);
+    })).sort((a, b) => b.rataRata - a.rataRata);
+  }, [mockNilai]);
 
-    // Distribusi nilai
+  const distribusiNilai = useMemo(() => {
     const ranges = { "90-100": 0, "80-89": 0, "70-79": 0, "60-69": 0, "<60": 0 };
-    umumNilai.forEach((n: any) => {
-      const v = Number(n.nilai || 0);
+    allNilaiValues.forEach(v => {
       if (v >= 90) ranges["90-100"]++;
       else if (v >= 80) ranges["80-89"]++;
       else if (v >= 70) ranges["70-79"]++;
       else if (v >= 60) ranges["60-69"]++;
       else ranges["<60"]++;
     });
-    setDistribusiNilai(Object.entries(ranges).map(([name, value]) => ({ name, value })));
+    return Object.entries(ranges).map(([name, value]) => ({ name, value }));
+  }, []);
 
-    // Recent activity (mapel with most entries)
-    const mapelActivity = Object.entries(mapelMap).map(([mapel, v]) => ({
-      mapel,
-      santri: v.count,
-      waktu: "Semester ini",
-    })).sort((a, b) => b.santri - a.santri).slice(0, 5);
-    setRecentActivity(mapelActivity);
-  };
+  const recentActivity = nilaiPerMapel.slice(0, 5).map(n => ({
+    mapel: n.nama,
+    santri: Object.keys(mockNilai).length,
+    waktu: "Semester ini",
+  }));
 
   const statCards = [
-    { title: "Total Santri Aktif", value: stats.totalSantri, desc: "Santri terdaftar", icon: Users, color: "text-blue-500" },
-    { title: "Mata Pelajaran", value: stats.totalMapel, desc: "Mapel umum aktif", icon: BookOpen, color: "text-green-500" },
-    { title: "Data Nilai", value: stats.totalNilai, desc: "Nilai terinput", icon: FileText, color: "text-orange-500" },
-    { title: "Rata-rata Nilai", value: stats.avgNilai || "-", desc: "Semua mapel umum", icon: TrendingUp, color: "text-purple-500" },
-    { title: "Komponen Nilai", value: stats.totalKomponen, desc: "Total komponen", icon: ClipboardCheck, color: "text-cyan-500" },
-    { title: "Ekstrakurikuler", value: stats.totalEkskul, desc: "Ekskul aktif", icon: Trophy, color: "text-pink-500" },
+    { title: "Total Santri Aktif", value: MOCK_SANTRI_AKADEMIK.filter(s => s.status === "Aktif").length, desc: "Santri terdaftar", icon: Users, color: "text-blue-500" },
+    { title: "Mata Pelajaran", value: umumMapel.length, desc: "Mapel umum aktif", icon: BookOpen, color: "text-green-500" },
+    { title: "Data Nilai", value: totalNilai, desc: "Nilai terinput", icon: FileText, color: "text-orange-500" },
+    { title: "Rata-rata Nilai", value: avgNilai || "-", desc: "Semua mapel umum", icon: TrendingUp, color: "text-purple-500" },
+    { title: "Komponen Nilai", value: MOCK_KOMPONEN_NILAI.length, desc: "Total komponen", icon: ClipboardCheck, color: "text-cyan-500" },
+    { title: "Ekstrakurikuler", value: MOCK_EKSKUL.filter(e => e.aktif).length, desc: "Ekskul aktif", icon: Trophy, color: "text-pink-500" },
   ];
 
   return (
@@ -116,9 +90,7 @@ export default function AkademikDashboard() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Rata-rata Nilai per Mapel</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Rata-rata Nilai per Mapel</CardTitle></CardHeader>
             <CardContent>
               {nilaiPerMapel.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
@@ -137,9 +109,7 @@ export default function AkademikDashboard() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Distribusi Nilai</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle className="text-base">Distribusi Nilai</CardTitle></CardHeader>
             <CardContent>
               {distribusiNilai.some(d => d.value > 0) ? (
                 <ResponsiveContainer width="100%" height={300}>
@@ -160,9 +130,7 @@ export default function AkademikDashboard() {
         </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Ringkasan Nilai per Mata Pelajaran</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle className="text-base">Ringkasan Nilai per Mata Pelajaran</CardTitle></CardHeader>
           <CardContent>
             {recentActivity.length > 0 ? (
               <div className="space-y-3">
