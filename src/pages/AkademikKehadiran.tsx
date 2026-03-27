@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,69 +6,26 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Save } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { MOCK_TAHUN_AJARAN, MOCK_KELAS_AKADEMIK, getSantriByKelas } from "@/lib/mock-akademik-data";
 
 const BULAN = ["Juli", "Agustus", "September", "Oktober", "November", "Desember", "Januari", "Februari", "Maret", "April", "Mei", "Juni"];
 const BULAN_NUM = [7, 8, 9, 10, 11, 12, 1, 2, 3, 4, 5, 6];
 
-type Santri = { id: string; nama_santri: string; nis: string };
-type KehadiranEntry = { bulan: number; sakit: number; izin: number; alpha: number; dbId?: string };
+type KehadiranEntry = { bulan: number; sakit: number; izin: number; alpha: number };
 
 export default function AkademikKehadiran() {
-  const [santriList, setSantriList] = useState<Santri[]>([]);
-  const [kelasList, setKelasList] = useState<{ id: string; nama_kelas: string; jenjang: string | null }[]>([]);
-  const [tahunAjaranList, setTahunAjaranList] = useState<any[]>([]);
-  const [selectedKelas, setSelectedKelas] = useState("");
-  const [selectedTa, setSelectedTa] = useState("");
+  const [selectedTa, setSelectedTa] = useState(MOCK_TAHUN_AJARAN.find(t => t.aktif)?.id || "");
   const [filterJenjang, setFilterJenjang] = useState("SMP");
+  const [selectedKelas, setSelectedKelas] = useState("");
   const [selectedSemester, setSelectedSemester] = useState<"Ganjil" | "Genap">("Ganjil");
   const [kehadiranMap, setKehadiranMap] = useState<Record<string, KehadiranEntry>>({});
   const [saving, setSaving] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   const semesterBulan = selectedSemester === "Ganjil" ? BULAN_NUM.slice(0, 6) : BULAN_NUM.slice(6);
   const semesterBulanNames = selectedSemester === "Ganjil" ? BULAN.slice(0, 6) : BULAN.slice(6);
-  const filteredKelas = kelasList.filter(k => !k.jenjang || k.jenjang === filterJenjang);
-
-  useEffect(() => {
-    (async () => {
-      const [taRes, kelasRes] = await Promise.all([
-        supabase.from("tahun_ajaran").select("*").order("created_at", { ascending: false }),
-        supabase.from("kelas").select("id, nama_kelas, jenjang").order("nama_kelas"),
-      ]);
-      if (taRes.data) {
-        setTahunAjaranList(taRes.data);
-        const aktif = taRes.data.find((t: any) => t.aktif);
-        if (aktif) setSelectedTa(aktif.id);
-      }
-      if (kelasRes.data) setKelasList(kelasRes.data);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (selectedKelas && selectedTa) loadData();
-  }, [selectedKelas, selectedTa]);
-
-  const loadData = async () => {
-    setLoading(true);
-    const { data: santriData } = await supabase.from("santri").select("id, nama_santri, nis")
-      .eq("id_kelas", selectedKelas).eq("status", "Aktif").order("nama_santri");
-    if (santriData) setSantriList(santriData);
-
-    if (santriData && santriData.length > 0) {
-      const { data: khData } = await supabase.from("kehadiran_akademik").select("*")
-        .in("id_santri", santriData.map(s => s.id)).eq("id_tahun_ajaran", selectedTa);
-
-      const map: Record<string, KehadiranEntry> = {};
-      (khData || []).forEach((k: any) => {
-        const key = `${k.id_santri}_${k.bulan}`;
-        map[key] = { bulan: k.bulan, sakit: k.sakit || 0, izin: k.izin || 0, alpha: k.alpha || 0, dbId: k.id };
-      });
-      setKehadiranMap(map);
-    }
-    setLoading(false);
-  };
+  const filteredKelas = MOCK_KELAS_AKADEMIK.filter(k => !k.jenjang || k.jenjang === filterJenjang);
+  const santriList = useMemo(() => selectedKelas ? getSantriByKelas(selectedKelas) : [], [selectedKelas]);
 
   const handleChange = (santriId: string, bulan: number, field: "sakit" | "izin" | "alpha", value: string) => {
     const key = `${santriId}_${bulan}`;
@@ -79,27 +36,9 @@ export default function AkademikKehadiran() {
     }));
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     setSaving(true);
-    const upsertData = Object.entries(kehadiranMap).map(([key, entry]) => {
-      const [id_santri, bulanStr] = key.split("_");
-      const tahun = Number(bulanStr) >= 7 ? 2025 : 2026;
-      return {
-        ...(entry.dbId ? { id: entry.dbId } : {}),
-        id_santri,
-        id_tahun_ajaran: selectedTa,
-        bulan: Number(bulanStr),
-        tahun,
-        sakit: entry.sakit,
-        izin: entry.izin,
-        alpha: entry.alpha,
-      };
-    });
-
-    const { error } = await supabase.from("kehadiran_akademik").upsert(upsertData as any, { onConflict: "id_santri,id_tahun_ajaran,bulan,tahun" });
-    if (error) toast.error("Gagal menyimpan: " + error.message);
-    else { toast.success("Kehadiran berhasil disimpan"); loadData(); }
-    setSaving(false);
+    setTimeout(() => { toast.success("Kehadiran berhasil disimpan"); setSaving(false); }, 300);
   };
 
   const getTotal = (santriId: string, field: "sakit" | "izin" | "alpha") => {
@@ -128,7 +67,7 @@ export default function AkademikKehadiran() {
                 <Select value={selectedTa} onValueChange={setSelectedTa}>
                   <SelectTrigger><SelectValue placeholder="Pilih TA" /></SelectTrigger>
                   <SelectContent>
-                    {tahunAjaranList.map((ta: any) => <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>)}
+                    {MOCK_TAHUN_AJARAN.map(ta => <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -200,13 +139,9 @@ export default function AkademikKehadiran() {
                       {semesterBulan.map(bulan => (
                         ["sakit", "izin", "alpha"].map(field => (
                           <TableCell key={`${bulan}-${field}`} className="p-1">
-                            <Input
-                              type="number"
-                              min={0}
-                              className="w-10 h-7 text-center text-xs p-0"
+                            <Input type="number" min={0} className="w-10 h-7 text-center text-xs p-0"
                               value={kehadiranMap[`${s.id}_${bulan}`]?.[field as "sakit"] || ""}
-                              onChange={e => handleChange(s.id, bulan, field as any, e.target.value)}
-                            />
+                              onChange={e => handleChange(s.id, bulan, field as any, e.target.value)} />
                           </TableCell>
                         ))
                       ))}

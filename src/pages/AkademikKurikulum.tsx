@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { usePagination } from "@/hooks/use-pagination";
 import { TablePagination } from "@/components/TablePagination";
 import { Layout } from "@/components/Layout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,125 +10,56 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
 import { Plus, Pencil, Trash2, BookOpen, Settings, GraduationCap } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-
-type Mapel = {
-  id: string;
-  nama: string;
-  kode: string | null;
-  jenjang: string;
-  kategori: string;
-  kkm: number | null;
-  urutan: number | null;
-  aktif: boolean | null;
-};
-
-type KomponenNilai = {
-  id: string;
-  id_mapel: string;
-  nama_komponen: string;
-  jenis: string;
-  bobot: number | null;
-  urutan: number | null;
-  kelas: string | null;
-};
-
-type EditingKomponen = KomponenNilai | null;
-
-type TahunAjaran = {
-  id: string;
-  nama: string;
-  semester: string;
-  aktif: boolean | null;
-};
+import { MOCK_MAPEL, MOCK_TAHUN_AJARAN, MOCK_KOMPONEN_NILAI, MockMapel, MockKomponenNilai, MockTahunAjaran } from "@/lib/mock-akademik-data";
 
 const KATEGORI_OPTIONS = ["Umum", "Agama", "Muatan Lokal", "Pemberdayaan", "Keterampilan"];
 const JENJANG_OPTIONS = ["TK", "SD", "SMP"];
 const JENIS_PENILAIAN = ["Tugas Harian", "Ujian Lisan", "Ujian Tulis", "Praktikum", "Proyek", "PAS", "PTS"];
 
 export default function AkademikKurikulum() {
-  const [mapelList, setMapelList] = useState<Mapel[]>([]);
-  const [tahunAjaranList, setTahunAjaranList] = useState<TahunAjaran[]>([]);
-  const [komponenList, setKomponenList] = useState<KomponenNilai[]>([]);
+  const [mapelList, setMapelList] = useState<MockMapel[]>([...MOCK_MAPEL]);
+  const [tahunAjaranList, setTahunAjaranList] = useState<MockTahunAjaran[]>([...MOCK_TAHUN_AJARAN]);
+  const [komponenList, setKomponenList] = useState<MockKomponenNilai[]>([]);
   const [filterJenjang, setFilterJenjang] = useState("SMP");
   const [filterKategori, setFilterKategori] = useState("all");
-  const [loading, setLoading] = useState(true);
 
-  // Mapel dialog
   const [mapelDialogOpen, setMapelDialogOpen] = useState(false);
-  const [editingMapel, setEditingMapel] = useState<Mapel | null>(null);
+  const [editingMapel, setEditingMapel] = useState<MockMapel | null>(null);
   const [mapelForm, setMapelForm] = useState({ nama: "", kode: "", jenjang: "SMP", kategori: "Umum", kkm: 70, urutan: 0 });
 
-  // Komponen dialog
   const [komponenDialogOpen, setKomponenDialogOpen] = useState(false);
-  const [selectedMapelForKomponen, setSelectedMapelForKomponen] = useState<Mapel | null>(null);
+  const [selectedMapelForKomponen, setSelectedMapelForKomponen] = useState<MockMapel | null>(null);
   const [komponenForm, setKomponenForm] = useState({ nama_komponen: "", jenis: "Tugas Harian", bobot: 1, kelas: "" });
-  const [editingKomponen, setEditingKomponen] = useState<EditingKomponen>(null);
+  const [editingKomponen, setEditingKomponen] = useState<MockKomponenNilai | null>(null);
 
-  // Tahun ajaran dialog
   const [taDialogOpen, setTaDialogOpen] = useState(false);
   const [taForm, setTaForm] = useState({ nama: "", semester: "Ganjil" });
-
   const [activeTab, setActiveTab] = useState("mapel");
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  const fetchData = async () => {
-    setLoading(true);
-    const [mapelRes, taRes] = await Promise.all([
-      supabase.from("mata_pelajaran").select("*").order("urutan"),
-      supabase.from("tahun_ajaran").select("*").order("created_at", { ascending: false }),
-    ]);
-    if (mapelRes.data) setMapelList(mapelRes.data as Mapel[]);
-    if (taRes.data) setTahunAjaranList(taRes.data as TahunAjaran[]);
-    setLoading(false);
-  };
-
-  const fetchKomponen = async (mapelId: string) => {
-    const { data } = await supabase.from("komponen_nilai").select("*").eq("id_mapel", mapelId).order("urutan");
-    if (data) setKomponenList(data as KomponenNilai[]);
-  };
-
-  // MAPEL CRUD
-  const handleSaveMapel = async () => {
+  const handleSaveMapel = () => {
     if (!mapelForm.nama.trim()) { toast.error("Nama mapel wajib diisi"); return; }
     if (editingMapel) {
-      const { error } = await supabase.from("mata_pelajaran").update({
-        nama: mapelForm.nama, kode: mapelForm.kode || null, jenjang: mapelForm.jenjang as any,
-        kategori: mapelForm.kategori as any, kkm: mapelForm.kkm, urutan: mapelForm.urutan,
-      }).eq("id", editingMapel.id);
-      if (error) { toast.error("Gagal mengupdate mapel"); return; }
+      setMapelList(prev => prev.map(m => m.id === editingMapel.id ? { ...m, nama: mapelForm.nama, kode: mapelForm.kode || null, jenjang: mapelForm.jenjang, kategori: mapelForm.kategori, kkm: mapelForm.kkm, urutan: mapelForm.urutan } : m));
       toast.success("Mapel berhasil diupdate");
     } else {
-      const { error } = await supabase.from("mata_pelajaran").insert({
-        nama: mapelForm.nama, kode: mapelForm.kode || null, jenjang: mapelForm.jenjang as any,
-        kategori: mapelForm.kategori as any, kkm: mapelForm.kkm, urutan: mapelForm.urutan,
-      });
-      if (error) { toast.error("Gagal menambah mapel"); return; }
+      setMapelList(prev => [...prev, { id: `mp_${Date.now()}`, nama: mapelForm.nama, kode: mapelForm.kode || null, jenjang: mapelForm.jenjang, kategori: mapelForm.kategori, kkm: mapelForm.kkm, urutan: mapelForm.urutan, aktif: true }]);
       toast.success("Mapel berhasil ditambahkan");
     }
-    setMapelDialogOpen(false);
-    setEditingMapel(null);
-    fetchData();
+    setMapelDialogOpen(false); setEditingMapel(null);
   };
 
-  const handleDeleteMapel = async (id: string) => {
+  const handleDeleteMapel = (id: string) => {
     if (!confirm("Yakin ingin menghapus mapel ini?")) return;
-    const { error } = await supabase.from("mata_pelajaran").delete().eq("id", id);
-    if (error) { toast.error("Gagal menghapus mapel"); return; }
+    setMapelList(prev => prev.filter(m => m.id !== id));
     toast.success("Mapel dihapus");
-    fetchData();
   };
 
-  const openEditMapel = (m: Mapel) => {
+  const openEditMapel = (m: MockMapel) => {
     setEditingMapel(m);
-    setMapelForm({ nama: m.nama, kode: m.kode || "", jenjang: m.jenjang, kategori: m.kategori, kkm: m.kkm || 70, urutan: m.urutan || 0 });
+    setMapelForm({ nama: m.nama, kode: m.kode || "", jenjang: m.jenjang, kategori: m.kategori, kkm: m.kkm, urutan: m.urutan });
     setMapelDialogOpen(true);
   };
 
@@ -138,96 +69,48 @@ export default function AkademikKurikulum() {
     setMapelDialogOpen(true);
   };
 
-  // KOMPONEN CRUD
-  const openKomponenDialog = (m: Mapel) => {
+  const openKomponenDialog = (m: MockMapel) => {
     setSelectedMapelForKomponen(m);
-    fetchKomponen(m.id);
+    setKomponenList(MOCK_KOMPONEN_NILAI.filter(k => k.id_mapel === m.id));
     setKomponenDialogOpen(true);
   };
 
-  const handleAddKomponen = async () => {
+  const handleAddKomponen = () => {
     if (!selectedMapelForKomponen || !komponenForm.nama_komponen.trim()) return;
-    
     if (editingKomponen) {
-      const { error } = await supabase.from("komponen_nilai").update({
-        nama_komponen: komponenForm.nama_komponen,
-        jenis: komponenForm.jenis as any,
-        bobot: komponenForm.bobot,
-        kelas: komponenForm.kelas || null,
-      }).eq("id", editingKomponen.id);
-      if (error) { toast.error("Gagal mengupdate komponen"); return; }
+      setKomponenList(prev => prev.map(k => k.id === editingKomponen.id ? { ...k, nama_komponen: komponenForm.nama_komponen, jenis: komponenForm.jenis, bobot: komponenForm.bobot, kelas: komponenForm.kelas || null } : k));
       toast.success("Komponen berhasil diupdate");
     } else {
-      const { error } = await supabase.from("komponen_nilai").insert({
-        id_mapel: selectedMapelForKomponen.id,
-        nama_komponen: komponenForm.nama_komponen,
-        jenis: komponenForm.jenis as any,
-        bobot: komponenForm.bobot,
-        kelas: komponenForm.kelas || null,
-        urutan: komponenList.length,
-      });
-      if (error) { toast.error("Gagal menambah komponen"); return; }
+      setKomponenList(prev => [...prev, { id: `kn_${Date.now()}`, id_mapel: selectedMapelForKomponen.id, nama_komponen: komponenForm.nama_komponen, jenis: komponenForm.jenis, bobot: komponenForm.bobot, urutan: komponenList.length, kelas: komponenForm.kelas || null }]);
       toast.success("Komponen ditambahkan");
     }
     setKomponenForm({ nama_komponen: "", jenis: "Tugas Harian", bobot: 1, kelas: "" });
     setEditingKomponen(null);
-    fetchKomponen(selectedMapelForKomponen.id);
   };
 
-  const openEditKomponen = (k: KomponenNilai) => {
-    setEditingKomponen(k);
-    setKomponenForm({ nama_komponen: k.nama_komponen, jenis: k.jenis, bobot: k.bobot || 1, kelas: k.kelas || "" });
-  };
-
-  const cancelEditKomponen = () => {
-    setEditingKomponen(null);
-    setKomponenForm({ nama_komponen: "", jenis: "Tugas Harian", bobot: 1, kelas: "" });
-  };
-
-  const handleDeleteKomponen = async (id: string) => {
-    const { error } = await supabase.from("komponen_nilai").delete().eq("id", id);
-    if (error) { toast.error("Gagal menghapus komponen"); return; }
+  const handleDeleteKomponen = (id: string) => {
+    setKomponenList(prev => prev.filter(k => k.id !== id));
     toast.success("Komponen dihapus");
-    if (selectedMapelForKomponen) fetchKomponen(selectedMapelForKomponen.id);
   };
 
-  // TAHUN AJARAN CRUD
-  const handleSaveTa = async () => {
+  const handleSaveTa = () => {
     if (!taForm.nama.trim()) { toast.error("Nama tahun ajaran wajib diisi"); return; }
-    const { error } = await supabase.from("tahun_ajaran").insert({
-      nama: taForm.nama, semester: taForm.semester as any,
-    });
-    if (error) { toast.error("Gagal menambah tahun ajaran"); return; }
+    setTahunAjaranList(prev => [...prev, { id: `ta_${Date.now()}`, nama: taForm.nama, semester: taForm.semester, aktif: false, created_at: new Date().toISOString() }]);
     toast.success("Tahun ajaran ditambahkan");
     setTaDialogOpen(false);
-    fetchData();
   };
 
-  const handleSetAktifTa = async (id: string) => {
-    // set all to false first
-    await supabase.from("tahun_ajaran").update({ aktif: false }).neq("id", "00000000-0000-0000-0000-000000000000");
-    await supabase.from("tahun_ajaran").update({ aktif: true }).eq("id", id);
+  const handleSetAktifTa = (id: string) => {
+    setTahunAjaranList(prev => prev.map(t => ({ ...t, aktif: t.id === id })));
     toast.success("Tahun ajaran aktif diubah");
-    fetchData();
   };
 
-  const filteredMapel = mapelList.filter(m => {
-    if (m.jenjang !== filterJenjang) return false;
-    if (filterKategori !== "all" && m.kategori !== filterKategori) return false;
-    return true;
-  });
-
+  const filteredMapel = mapelList.filter(m => m.jenjang === filterJenjang && (filterKategori === "all" || m.kategori === filterKategori));
   const mapelPagination = usePagination(filteredMapel);
   const taPagination = usePagination(tahunAjaranList);
 
   const getKategoriBadge = (k: string) => {
-    const colors: Record<string, string> = {
-      "Umum": "bg-blue-500/10 text-blue-700",
-      "Agama": "bg-emerald-500/10 text-emerald-700",
-      "Muatan Lokal": "bg-purple-500/10 text-purple-700",
-      "Pemberdayaan": "bg-amber-500/10 text-amber-700",
-      "Keterampilan": "bg-pink-500/10 text-pink-700",
-    };
+    const colors: Record<string, string> = { "Umum": "bg-blue-500/10 text-blue-700", "Agama": "bg-emerald-500/10 text-emerald-700", "Muatan Lokal": "bg-purple-500/10 text-purple-700", "Pemberdayaan": "bg-amber-500/10 text-amber-700", "Keterampilan": "bg-pink-500/10 text-pink-700" };
     return <Badge className={colors[k] || ""}>{k}</Badge>;
   };
 
@@ -246,14 +129,11 @@ export default function AkademikKurikulum() {
           </TabsList>
 
           <TabsContent value="mapel" className="space-y-4">
-            {/* Filter & Actions */}
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
               <div className="flex gap-2">
                 <Select value={filterJenjang} onValueChange={setFilterJenjang}>
                   <SelectTrigger className="w-32"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {JENJANG_OPTIONS.map(j => <SelectItem key={j} value={j}>{j}</SelectItem>)}
-                  </SelectContent>
+                  <SelectContent>{JENJANG_OPTIONS.map(j => <SelectItem key={j} value={j}>{j}</SelectItem>)}</SelectContent>
                 </Select>
                 <Select value={filterKategori} onValueChange={setFilterKategori}>
                   <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
@@ -280,9 +160,7 @@ export default function AkademikKurikulum() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {loading ? (
-                      <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Memuat data...</TableCell></TableRow>
-                    ) : filteredMapel.length === 0 ? (
+                    {filteredMapel.length === 0 ? (
                       <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">Belum ada mata pelajaran untuk jenjang {filterJenjang}</TableCell></TableRow>
                     ) : mapelPagination.paginatedItems.map((m, i) => (
                       <TableRow key={m.id}>
@@ -293,15 +171,9 @@ export default function AkademikKurikulum() {
                         <TableCell className="text-center">{m.kkm}</TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => openKomponenDialog(m)} title="Kelola Komponen Nilai">
-                              <Settings className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => openEditMapel(m)}>
-                              <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteMapel(m.id)}>
-                              <Trash2 className="w-4 h-4 text-destructive" />
-                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => openKomponenDialog(m)}><Settings className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => openEditMapel(m)}><Pencil className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteMapel(m.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -310,22 +182,14 @@ export default function AkademikKurikulum() {
                 </Table>
               </CardContent>
               <div className="px-4 pb-4">
-                <TablePagination
-                  currentPage={mapelPagination.currentPage}
-                  totalPages={mapelPagination.totalPages}
-                  totalItems={mapelPagination.totalItems}
-                  startIndex={mapelPagination.startIndex}
-                  onPageChange={mapelPagination.setCurrentPage}
-                />
+                <TablePagination currentPage={mapelPagination.currentPage} totalPages={mapelPagination.totalPages} totalItems={mapelPagination.totalItems} startIndex={mapelPagination.startIndex} onPageChange={mapelPagination.setCurrentPage} />
               </div>
             </Card>
           </TabsContent>
 
           <TabsContent value="tahun-ajaran" className="space-y-4">
             <div className="flex justify-end">
-              <Button onClick={() => { setTaForm({ nama: "", semester: "Ganjil" }); setTaDialogOpen(true); }}>
-                <Plus className="w-4 h-4 mr-1" /> Tambah Tahun Ajaran
-              </Button>
+              <Button onClick={() => { setTaForm({ nama: "", semester: "Ganjil" }); setTaDialogOpen(true); }}><Plus className="w-4 h-4 mr-1" /> Tambah Tahun Ajaran</Button>
             </div>
             <Card>
               <CardContent className="p-0">
@@ -351,9 +215,7 @@ export default function AkademikKurikulum() {
                           {ta.aktif ? <Badge className="bg-primary/10 text-primary">Aktif</Badge> : <Badge variant="outline">Nonaktif</Badge>}
                         </TableCell>
                         <TableCell className="text-center">
-                          {!ta.aktif && (
-                            <Button variant="outline" size="sm" onClick={() => handleSetAktifTa(ta.id)}>Set Aktif</Button>
-                          )}
+                          {!ta.aktif && <Button variant="outline" size="sm" onClick={() => handleSetAktifTa(ta.id)}>Set Aktif</Button>}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -361,20 +223,13 @@ export default function AkademikKurikulum() {
                 </Table>
               </CardContent>
               <div className="px-4 pb-4">
-                <TablePagination
-                  currentPage={taPagination.currentPage}
-                  totalPages={taPagination.totalPages}
-                  totalItems={taPagination.totalItems}
-                  startIndex={taPagination.startIndex}
-                  onPageChange={taPagination.setCurrentPage}
-                />
+                <TablePagination currentPage={taPagination.currentPage} totalPages={taPagination.totalPages} totalItems={taPagination.totalItems} startIndex={taPagination.startIndex} onPageChange={taPagination.setCurrentPage} />
               </div>
             </Card>
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* Mapel Dialog */}
       <Dialog open={mapelDialogOpen} onOpenChange={setMapelDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>{editingMapel ? "Edit" : "Tambah"} Mata Pelajaran</DialogTitle></DialogHeader>
@@ -404,46 +259,27 @@ export default function AkademikKurikulum() {
         </DialogContent>
       </Dialog>
 
-      {/* Komponen Nilai Dialog */}
-      {/* Komponen Nilai Dialog */}
       <Dialog open={komponenDialogOpen} onOpenChange={setKomponenDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader><DialogTitle>Komponen Nilai: {selectedMapelForKomponen?.nama}</DialogTitle></DialogHeader>
           <div className="space-y-4 overflow-y-auto flex-1 pr-1">
-            {/* Add Form */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 items-end">
-              <div>
-                <Label className="text-xs">Nama</Label>
-                <Input value={komponenForm.nama_komponen} onChange={e => setKomponenForm(f => ({ ...f, nama_komponen: e.target.value }))} placeholder="Tugas Harian 1" />
-              </div>
-              <div>
-                <Label className="text-xs">Jenis</Label>
+              <div><Label className="text-xs">Nama</Label><Input value={komponenForm.nama_komponen} onChange={e => setKomponenForm(f => ({ ...f, nama_komponen: e.target.value }))} placeholder="Tugas Harian 1" /></div>
+              <div><Label className="text-xs">Jenis</Label>
                 <Select value={komponenForm.jenis} onValueChange={v => setKomponenForm(f => ({ ...f, jenis: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{JENIS_PENILAIAN.map(j => <SelectItem key={j} value={j}>{j}</SelectItem>)}</SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label className="text-xs">Kelas (opsional)</Label>
-                <Input value={komponenForm.kelas} onChange={e => setKomponenForm(f => ({ ...f, kelas: e.target.value }))} placeholder="7, 8, 9..." />
-              </div>
+              <div><Label className="text-xs">Kelas (opsional)</Label><Input value={komponenForm.kelas} onChange={e => setKomponenForm(f => ({ ...f, kelas: e.target.value }))} placeholder="7, 8, 9..." /></div>
               <div className="flex gap-1">
                 <Button onClick={handleAddKomponen} size="sm" className="w-full sm:w-auto"><Plus className="w-4 h-4 mr-1" /> {editingKomponen ? "Update" : "Tambah"}</Button>
-                {editingKomponen && <Button onClick={cancelEditKomponen} size="sm" variant="outline">Batal</Button>}
+                {editingKomponen && <Button onClick={() => { setEditingKomponen(null); setKomponenForm({ nama_komponen: "", jenis: "Tugas Harian", bobot: 1, kelas: "" }); }} size="sm" variant="outline">Batal</Button>}
               </div>
             </div>
-
-            {/* List */}
             <div className="overflow-x-auto">
               <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nama Komponen</TableHead>
-                    <TableHead>Jenis</TableHead>
-                    <TableHead>Kelas</TableHead>
-                    <TableHead className="w-24"></TableHead>
-                  </TableRow>
-                </TableHeader>
+                <TableHeader><TableRow><TableHead>Nama Komponen</TableHead><TableHead>Jenis</TableHead><TableHead>Kelas</TableHead><TableHead className="w-24"></TableHead></TableRow></TableHeader>
                 <TableBody>
                   {komponenList.length === 0 ? (
                     <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-4">Belum ada komponen</TableCell></TableRow>
@@ -454,7 +290,7 @@ export default function AkademikKurikulum() {
                       <TableCell>{k.kelas || "Semua"}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEditKomponen(k)}><Pencil className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => { setEditingKomponen(k); setKomponenForm({ nama_komponen: k.nama_komponen, jenis: k.jenis, bobot: k.bobot, kelas: k.kelas || "" }); }}><Pencil className="w-4 h-4" /></Button>
                           <Button variant="ghost" size="sm" onClick={() => handleDeleteKomponen(k.id)}><Trash2 className="w-4 h-4 text-destructive" /></Button>
                         </div>
                       </TableCell>
@@ -467,7 +303,6 @@ export default function AkademikKurikulum() {
         </DialogContent>
       </Dialog>
 
-      {/* Tahun Ajaran Dialog */}
       <Dialog open={taDialogOpen} onOpenChange={setTaDialogOpen}>
         <DialogContent>
           <DialogHeader><DialogTitle>Tambah Tahun Ajaran</DialogTitle></DialogHeader>
@@ -476,10 +311,7 @@ export default function AkademikKurikulum() {
             <div><Label>Semester</Label>
               <Select value={taForm.semester} onValueChange={v => setTaForm(f => ({ ...f, semester: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Ganjil">Ganjil</SelectItem>
-                  <SelectItem value="Genap">Genap</SelectItem>
-                </SelectContent>
+                <SelectContent><SelectItem value="Ganjil">Ganjil</SelectItem><SelectItem value="Genap">Genap</SelectItem></SelectContent>
               </Select>
             </div>
           </div>

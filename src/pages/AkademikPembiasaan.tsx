@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,40 +6,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Save } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { MOCK_TAHUN_AJARAN, MOCK_KELAS_AKADEMIK, getSantriByKelas } from "@/lib/mock-akademik-data";
 
 type PredikatPembiasaan = "A" | "B" | "C" | "D";
-type Santri = { id: string; nama_santri: string; nis: string };
-type TahunAjaran = { id: string; nama: string; semester: string; aktif: boolean | null };
 
 const PEMBIASAAN_SEKOLAH = [
-  "Datang tepat waktu",
-  "Berpakaian bersih dan rapi",
-  "Murojaah sebelum mulai belajar",
-  "Mengucapkan salam ketika bertemu",
-  "Sholat Dhuha",
-  "Tertib belajar",
-  "Menerapkan adab makan dan minum",
-  "Menjaga kebersihan sekolah",
-  "Bersikap ramah dan sopan",
-  "Membuang sampah pada tempatnya",
-  "Rajin Puasa sunnah",
-  "Tidak meninggalkan barang bawaan",
+  "Datang tepat waktu", "Berpakaian bersih dan rapi", "Murojaah sebelum mulai belajar",
+  "Mengucapkan salam ketika bertemu", "Sholat Dhuha", "Tertib belajar",
+  "Menerapkan adab makan dan minum", "Menjaga kebersihan sekolah", "Bersikap ramah dan sopan",
+  "Membuang sampah pada tempatnya", "Rajin Puasa sunnah", "Tidak meninggalkan barang bawaan",
 ];
 
 const PEMBIASAAN_RUMAH = [
-  "Sholat Shubuh",
-  "Sholat Dhuhur",
-  "Sholat Ashar",
-  "Sholat Maghrib",
-  "Sholat Isya'",
-  "Sholat sunnah rawatib",
-  "Membaca/murojaah Al Quran",
-  "Belajar/mengerjakan tugas",
-  "Membantu orang tua di rumah",
-  "Melaksanakan dzikir pagi",
-  "Melaksanakan dzikir petang",
+  "Sholat Shubuh", "Sholat Dhuhur", "Sholat Ashar", "Sholat Maghrib", "Sholat Isya'",
+  "Sholat sunnah rawatib", "Membaca/murojaah Al Quran", "Belajar/mengerjakan tugas",
+  "Membantu orang tua di rumah", "Melaksanakan dzikir pagi", "Melaksanakan dzikir petang",
   "Menerapkan adab sehari-hari",
 ];
 
@@ -51,80 +33,24 @@ const predikatColors: Record<PredikatPembiasaan, string> = {
 };
 
 export default function AkademikPembiasaan() {
-  const [santriList, setSantriList] = useState<Santri[]>([]);
-  const [kelasList, setKelasList] = useState<{ id: string; nama_kelas: string; jenjang: string | null }[]>([]);
-  const [tahunAjaranList, setTahunAjaranList] = useState<TahunAjaran[]>([]);
-
-  const [selectedTa, setSelectedTa] = useState("");
+  const [selectedTa, setSelectedTa] = useState(MOCK_TAHUN_AJARAN.find(t => t.aktif)?.id || "");
   const [filterJenjang, setFilterJenjang] = useState("SMP");
   const [selectedKelas, setSelectedKelas] = useState("");
   const [lokasi, setLokasi] = useState<"sekolah" | "rumah">("sekolah");
-
   const [dataMap, setDataMap] = useState<Record<string, PredikatPembiasaan>>({});
   const [saving, setSaving] = useState(false);
 
   const items = lokasi === "sekolah" ? PEMBIASAAN_SEKOLAH : PEMBIASAAN_RUMAH;
-  const filteredKelas = kelasList.filter(k => !k.jenjang || k.jenjang === filterJenjang);
-
-  useEffect(() => {
-    (async () => {
-      const [taRes, kelasRes] = await Promise.all([
-        supabase.from("tahun_ajaran").select("*").order("created_at", { ascending: false }),
-        supabase.from("kelas").select("id, nama_kelas, jenjang").order("nama_kelas"),
-      ]);
-      if (taRes.data) {
-        setTahunAjaranList(taRes.data as TahunAjaran[]);
-        const aktif = (taRes.data as TahunAjaran[]).find(t => t.aktif);
-        if (aktif) setSelectedTa(aktif.id);
-      }
-      if (kelasRes.data) setKelasList(kelasRes.data);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (selectedKelas && selectedTa) loadData();
-  }, [selectedKelas, selectedTa, lokasi]);
-
-  const loadData = async () => {
-    const { data: santriData } = await supabase.from("santri").select("id, nama_santri, nis")
-      .eq("id_kelas", selectedKelas).eq("status", "Aktif").order("nama_santri");
-    if (santriData) setSantriList(santriData);
-
-    if (santriData && santriData.length > 0) {
-      const { data: pembiasaanData } = await supabase.from("pembiasaan").select("*")
-        .in("id_santri", santriData.map(s => s.id))
-        .eq("id_tahun_ajaran", selectedTa)
-        .eq("lokasi", lokasi);
-
-      const map: Record<string, PredikatPembiasaan> = {};
-      (pembiasaanData || []).forEach((p: any) => {
-        map[`${p.id_santri}_${p.nomor}`] = p.nilai as PredikatPembiasaan;
-      });
-      setDataMap(map);
-    }
-  };
+  const filteredKelas = MOCK_KELAS_AKADEMIK.filter(k => !k.jenjang || k.jenjang === filterJenjang);
+  const santriList = useMemo(() => selectedKelas ? getSantriByKelas(selectedKelas) : [], [selectedKelas]);
 
   const handleChange = (santriId: string, idx: number, value: PredikatPembiasaan) => {
     setDataMap(prev => ({ ...prev, [`${santriId}_${idx}`]: value }));
   };
 
-  const handleSave = async () => {
-    if (!selectedKelas || !selectedTa) return;
+  const handleSave = () => {
     setSaving(true);
-    const upsertData = santriList.flatMap(s =>
-      items.map((_, idx) => ({
-        id_santri: s.id,
-        id_tahun_ajaran: selectedTa,
-        lokasi,
-        nomor: idx,
-        nilai: dataMap[`${s.id}_${idx}`] || "A",
-      }))
-    );
-
-    const { error } = await supabase.from("pembiasaan").upsert(upsertData as any, { onConflict: "id_santri,id_tahun_ajaran,lokasi,nomor" });
-    if (error) toast.error("Gagal menyimpan: " + error.message);
-    else toast.success("Data pembiasaan berhasil disimpan");
-    setSaving(false);
+    setTimeout(() => { toast.success("Data pembiasaan berhasil disimpan"); setSaving(false); }, 300);
   };
 
   return (
@@ -146,7 +72,7 @@ export default function AkademikPembiasaan() {
                 <Select value={selectedTa} onValueChange={setSelectedTa}>
                   <SelectTrigger><SelectValue placeholder="Pilih TA" /></SelectTrigger>
                   <SelectContent>
-                    {tahunAjaranList.map(ta => <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>)}
+                    {MOCK_TAHUN_AJARAN.map(ta => <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -188,9 +114,7 @@ export default function AkademikPembiasaan() {
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">
-                  Pembiasaan di {lokasi === "sekolah" ? "Sekolah" : "Rumah"} ({santriList.length} santri)
-                </CardTitle>
+                <CardTitle className="text-base">Pembiasaan di {lokasi === "sekolah" ? "Sekolah" : "Rumah"} ({santriList.length} santri)</CardTitle>
                 <div className="flex gap-2 text-xs">
                   {(["A", "B", "C", "D"] as PredikatPembiasaan[]).map((p) => (
                     <Badge key={p} className={predikatColors[p]}>{p}</Badge>
@@ -222,9 +146,7 @@ export default function AkademikPembiasaan() {
                           return (
                             <TableCell key={iIdx} className="text-center p-1">
                               <Select value={val} onValueChange={(v) => handleChange(santri.id, iIdx, v as PredikatPembiasaan)}>
-                                <SelectTrigger className="h-7 w-12 mx-auto text-xs">
-                                  <SelectValue />
-                                </SelectTrigger>
+                                <SelectTrigger className="h-7 w-12 mx-auto text-xs"><SelectValue /></SelectTrigger>
                                 <SelectContent>
                                   {(["A", "B", "C", "D"] as PredikatPembiasaan[]).map((p) => (
                                     <SelectItem key={p} value={p}>{p}</SelectItem>

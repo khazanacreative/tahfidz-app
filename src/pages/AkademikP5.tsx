@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,19 +6,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Save } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { keteranganPredikatP3 } from "@/lib/rapor-akademik-types";
+import { MOCK_TAHUN_AJARAN, MOCK_KELAS_AKADEMIK, getSantriByKelas } from "@/lib/mock-akademik-data";
 
 type PredikatP5 = "MB" | "SB" | "BSH" | "SAB";
-type Santri = { id: string; nama_santri: string; nis: string };
-type TahunAjaran = { id: string; nama: string; semester: string; aktif: boolean | null };
 
-interface DimensiP5 {
-  dimensi: string;
-  elemen: string;
-  deskripsi: string;
-}
+interface DimensiP5 { dimensi: string; elemen: string; deskripsi: string; }
 
 const DIMENSI_P5: DimensiP5[] = [
   { dimensi: "Beriman, Bertaqwa kepada Tuhan YME, dan Berakhlak Mulia", elemen: "Elemen akhlak beragama", deskripsi: "Terbiasa melaksanakan ibadah wajib sesuai tuntunan agama/kepercayaannya." },
@@ -40,85 +34,28 @@ const predikatColors: Record<PredikatP5, string> = {
 };
 
 export default function AkademikP5() {
-  const [santriList, setSantriList] = useState<Santri[]>([]);
-  const [kelasList, setKelasList] = useState<{ id: string; nama_kelas: string; jenjang: string | null }[]>([]);
-  const [tahunAjaranList, setTahunAjaranList] = useState<TahunAjaran[]>([]);
-
-  const [selectedTa, setSelectedTa] = useState("");
+  const [selectedTa, setSelectedTa] = useState(MOCK_TAHUN_AJARAN.find(t => t.aktif)?.id || "");
   const [filterJenjang, setFilterJenjang] = useState("SMP");
   const [selectedKelas, setSelectedKelas] = useState("");
   const [selectedSantri, setSelectedSantri] = useState("");
-
   const [p5Data, setP5Data] = useState<Record<number, PredikatP5>>({});
   const [saving, setSaving] = useState(false);
 
-  const filteredKelas = kelasList.filter(k => !k.jenjang || k.jenjang === filterJenjang);
-
-  useEffect(() => {
-    (async () => {
-      const [taRes, kelasRes] = await Promise.all([
-        supabase.from("tahun_ajaran").select("*").order("created_at", { ascending: false }),
-        supabase.from("kelas").select("id, nama_kelas, jenjang").order("nama_kelas"),
-      ]);
-      if (taRes.data) {
-        setTahunAjaranList(taRes.data as TahunAjaran[]);
-        const aktif = (taRes.data as TahunAjaran[]).find(t => t.aktif);
-        if (aktif) setSelectedTa(aktif.id);
-      }
-      if (kelasRes.data) setKelasList(kelasRes.data);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (selectedKelas) loadSantri();
+  const filteredKelas = MOCK_KELAS_AKADEMIK.filter(k => !k.jenjang || k.jenjang === filterJenjang);
+  const santriList = useMemo(() => {
+    if (!selectedKelas) return [];
+    const list = getSantriByKelas(selectedKelas);
+    if (list.length > 0 && !selectedSantri) setSelectedSantri(list[0].id);
+    return list;
   }, [selectedKelas]);
-
-  useEffect(() => {
-    if (selectedSantri && selectedTa) loadP5Data();
-  }, [selectedSantri, selectedTa]);
-
-  const loadSantri = async () => {
-    const { data } = await supabase.from("santri").select("id, nama_santri, nis")
-      .eq("id_kelas", selectedKelas).eq("status", "Aktif").order("nama_santri");
-    if (data) {
-      setSantriList(data);
-      if (data.length > 0) setSelectedSantri(data[0].id);
-      else setSelectedSantri("");
-    }
-  };
-
-  const loadP5Data = async () => {
-    const { data } = await supabase.from("profil_p5").select("*")
-      .eq("id_santri", selectedSantri).eq("id_tahun_ajaran", selectedTa);
-
-    const map: Record<number, PredikatP5> = {};
-    DIMENSI_P5.forEach((d, idx) => {
-      const found = (data || []).find((r: any) => r.dimensi === d.dimensi && r.elemen === d.elemen);
-      map[idx] = (found?.nilai as PredikatP5) || "BSH";
-    });
-    setP5Data(map);
-  };
 
   const handleNilaiChange = (idx: number, value: PredikatP5) => {
     setP5Data(prev => ({ ...prev, [idx]: value }));
   };
 
-  const handleSave = async () => {
-    if (!selectedSantri || !selectedTa) return;
+  const handleSave = () => {
     setSaving(true);
-    const upsertData = DIMENSI_P5.map((d, idx) => ({
-      id_santri: selectedSantri,
-      id_tahun_ajaran: selectedTa,
-      dimensi: d.dimensi,
-      elemen: d.elemen,
-      deskripsi_elemen: d.deskripsi,
-      nilai: p5Data[idx] || "BSH",
-    }));
-
-    const { error } = await supabase.from("profil_p5").upsert(upsertData as any, { onConflict: "id_santri,id_tahun_ajaran,dimensi,elemen" });
-    if (error) toast.error("Gagal menyimpan: " + error.message);
-    else toast.success("Data P5 berhasil disimpan");
-    setSaving(false);
+    setTimeout(() => { toast.success("Data P5 berhasil disimpan"); setSaving(false); }, 300);
   };
 
   const grouped = DIMENSI_P5.reduce((acc, d, idx) => {
@@ -146,7 +83,7 @@ export default function AkademikP5() {
                 <Select value={selectedTa} onValueChange={setSelectedTa}>
                   <SelectTrigger><SelectValue placeholder="Pilih TA" /></SelectTrigger>
                   <SelectContent>
-                    {tahunAjaranList.map(ta => <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>)}
+                    {MOCK_TAHUN_AJARAN.map(ta => <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -217,15 +154,7 @@ export default function AkademikP5() {
                             <TableCell>
                               <div className="flex justify-center gap-1">
                                 {(["MB", "SB", "BSH", "SAB"] as PredikatP5[]).map((p) => (
-                                  <Button
-                                    key={p}
-                                    size="sm"
-                                    variant={p5Data[item.idx] === p ? "default" : "outline"}
-                                    className="h-7 px-2 text-xs"
-                                    onClick={() => handleNilaiChange(item.idx, p)}
-                                  >
-                                    {p}
-                                  </Button>
+                                  <Button key={p} size="sm" variant={p5Data[item.idx] === p ? "default" : "outline"} className="h-7 px-2 text-xs" onClick={() => handleNilaiChange(item.idx, p)}>{p}</Button>
                                 ))}
                               </div>
                             </TableCell>

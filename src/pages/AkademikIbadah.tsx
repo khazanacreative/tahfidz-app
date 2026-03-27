@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,18 +7,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Save } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { MOCK_TAHUN_AJARAN, MOCK_KELAS_AKADEMIK, getSantriByKelas } from "@/lib/mock-akademik-data";
 
-const JENIS_IBADAH = [
-  "Praktek Wudhu",
-  "Praktek Shalat",
-  "Dzikir Setelah Shalat",
-  "Dzikir Pagi Petang",
-];
-
-type Santri = { id: string; nama_santri: string; nis: string };
-type TahunAjaran = { id: string; nama: string; semester: string; aktif: boolean | null };
+const JENIS_IBADAH = ["Praktek Wudhu", "Praktek Shalat", "Dzikir Setelah Shalat", "Dzikir Pagi Petang"];
 
 function getPredikat(nilai: number): { predikat: string; color: string } {
   if (nilai >= 90) return { predikat: "A", color: "bg-green-500/10 text-green-700" };
@@ -28,90 +20,24 @@ function getPredikat(nilai: number): { predikat: string; color: string } {
 }
 
 export default function AkademikIbadah() {
-  const [santriList, setSantriList] = useState<Santri[]>([]);
-  const [kelasList, setKelasList] = useState<{ id: string; nama_kelas: string; jenjang: string | null }[]>([]);
-  const [tahunAjaranList, setTahunAjaranList] = useState<TahunAjaran[]>([]);
-
-  const [selectedTa, setSelectedTa] = useState("");
+  const [selectedTa, setSelectedTa] = useState(MOCK_TAHUN_AJARAN.find(t => t.aktif)?.id || "");
   const [filterJenjang, setFilterJenjang] = useState("SMP");
   const [selectedKelas, setSelectedKelas] = useState("");
-
-  // dataMap: { santriId_jenisIdx: { nilai, kkm, dbId? } }
-  const [dataMap, setDataMap] = useState<Record<string, { nilai: number; kkm: number; dbId?: string }>>({});
+  const [dataMap, setDataMap] = useState<Record<string, { nilai: number; kkm: number }>>({});
   const [saving, setSaving] = useState(false);
 
-  const filteredKelas = kelasList.filter(k => !k.jenjang || k.jenjang === filterJenjang);
-
-  useEffect(() => {
-    (async () => {
-      const [taRes, kelasRes] = await Promise.all([
-        supabase.from("tahun_ajaran").select("*").order("created_at", { ascending: false }),
-        supabase.from("kelas").select("id, nama_kelas, jenjang").order("nama_kelas"),
-      ]);
-      if (taRes.data) {
-        setTahunAjaranList(taRes.data as TahunAjaran[]);
-        const aktif = (taRes.data as TahunAjaran[]).find(t => t.aktif);
-        if (aktif) setSelectedTa(aktif.id);
-      }
-      if (kelasRes.data) setKelasList(kelasRes.data);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (selectedKelas && selectedTa) loadData();
-  }, [selectedKelas, selectedTa]);
-
-  const loadData = async () => {
-    const { data: santriData } = await supabase.from("santri").select("id, nama_santri, nis")
-      .eq("id_kelas", selectedKelas).eq("status", "Aktif").order("nama_santri");
-    if (santriData) setSantriList(santriData);
-
-    if (santriData && santriData.length > 0) {
-      const { data: ibadahData } = await supabase.from("keterampilan_ibadah").select("*")
-        .in("id_santri", santriData.map(s => s.id))
-        .eq("id_tahun_ajaran", selectedTa);
-
-      const map: Record<string, { nilai: number; kkm: number; dbId?: string }> = {};
-      (ibadahData || []).forEach((r: any) => {
-        const jenisIdx = JENIS_IBADAH.indexOf(r.jenis);
-        if (jenisIdx >= 0) {
-          map[`${r.id_santri}_${jenisIdx}`] = { nilai: Number(r.nilai) || 0, kkm: r.kkm || 70, dbId: r.id };
-        }
-      });
-      setDataMap(map);
-    }
-  };
+  const filteredKelas = MOCK_KELAS_AKADEMIK.filter(k => !k.jenjang || k.jenjang === filterJenjang);
+  const santriList = useMemo(() => selectedKelas ? getSantriByKelas(selectedKelas) : [], [selectedKelas]);
 
   const handleNilaiChange = (santriId: string, idx: number, value: string) => {
     const num = Math.max(0, Math.min(100, parseInt(value) || 0));
     const key = `${santriId}_${idx}`;
-    setDataMap(prev => ({
-      ...prev,
-      [key]: { ...(prev[key] || { nilai: 0, kkm: 70 }), nilai: num },
-    }));
+    setDataMap(prev => ({ ...prev, [key]: { ...(prev[key] || { nilai: 0, kkm: 70 }), nilai: num } }));
   };
 
-  const handleSave = async () => {
-    if (!selectedKelas || !selectedTa) return;
+  const handleSave = () => {
     setSaving(true);
-    const upsertData = santriList.flatMap(s =>
-      JENIS_IBADAH.map((jenis, idx) => {
-        const entry = dataMap[`${s.id}_${idx}`];
-        return {
-          ...(entry?.dbId ? { id: entry.dbId } : {}),
-          id_santri: s.id,
-          id_tahun_ajaran: selectedTa,
-          jenis,
-          nilai: entry?.nilai ?? 0,
-          kkm: 70,
-        };
-      })
-    );
-
-    const { error } = await supabase.from("keterampilan_ibadah").upsert(upsertData as any, { onConflict: "id_santri,id_tahun_ajaran,jenis" });
-    if (error) toast.error("Gagal menyimpan: " + error.message);
-    else { toast.success("Nilai keterampilan ibadah berhasil disimpan"); loadData(); }
-    setSaving(false);
+    setTimeout(() => { toast.success("Nilai keterampilan ibadah berhasil disimpan"); setSaving(false); }, 300);
   };
 
   return (
@@ -133,7 +59,7 @@ export default function AkademikIbadah() {
                 <Select value={selectedTa} onValueChange={setSelectedTa}>
                   <SelectTrigger><SelectValue placeholder="Pilih TA" /></SelectTrigger>
                   <SelectContent>
-                    {tahunAjaranList.map(ta => <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>)}
+                    {MOCK_TAHUN_AJARAN.map(ta => <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -163,9 +89,7 @@ export default function AkademikIbadah() {
 
         {selectedKelas && santriList.length > 0 && (
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Nilai Keterampilan Ibadah ({santriList.length} santri)</CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Nilai Keterampilan Ibadah ({santriList.length} santri)</CardTitle></CardHeader>
             <CardContent>
               <div className="overflow-x-auto">
                 <Table>
@@ -193,14 +117,9 @@ export default function AkademikIbadah() {
                           const entry = dataMap[`${santri.id}_${iIdx}`] || { nilai: 0, kkm: 70 };
                           return (
                             <TableCell key={iIdx} className="p-1">
-                              <Input
-                                type="number"
-                                min={0}
-                                max={100}
-                                value={entry.nilai}
+                              <Input type="number" min={0} max={100} value={entry.nilai}
                                 onChange={(e) => handleNilaiChange(santri.id, iIdx, e.target.value)}
-                                className={`h-8 w-16 text-center mx-auto text-sm ${entry.nilai < entry.kkm ? "border-red-400 text-red-600" : ""}`}
-                              />
+                                className={`h-8 w-16 text-center mx-auto text-sm ${entry.nilai < 70 ? "border-red-400 text-red-600" : ""}`} />
                             </TableCell>
                           );
                         })}
