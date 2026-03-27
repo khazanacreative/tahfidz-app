@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -34,21 +35,25 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { GraduationCap, Plus, AlertCircle, CheckCircle2, Info, Eye } from "lucide-react";
+import { GraduationCap, Plus, Info, RefreshCw, Shuffle, Search } from "lucide-react";
 import { JuzSelector } from "@/components/JuzSelector";
+import { supabase } from "@/integrations/supabase/client";
+import { generateExamQuestions, formatQuestionDisplay, ExamQuestion, getHalamanPerJuz } from "@/lib/quran-exam-generator";
+import { toast } from "sonner";
+import { MOCK_KELAS, getSantriByNama } from "@/lib/mock-data";
 
-// Mock data
-const mockHalaqohList = [
-  { id: "1", nama_halaqoh: "Halaqoh A" },
-  { id: "2", nama_halaqoh: "Halaqoh B" },
-];
+interface Halaqoh {
+  id: string;
+  nama_halaqoh: string;
+}
 
-const mockKelasList = [
-  { id: "1", nama_kelas: "Paket A Kelas 6" },
-  { id: "2", nama_kelas: "KBTK A" },
-];
+interface Kelas {
+  id: string;
+  nama_kelas: string;
+}
 
 const UjianTahfidz = () => {
+  const navigate = useNavigate();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedSantri, setSelectedSantri] = useState("");
   const [selectedAsatidz, setSelectedAsatidz] = useState("");
@@ -58,17 +63,29 @@ const UjianTahfidz = () => {
   const [catatan, setCatatan] = useState("");
   const [filterHalaqoh, setFilterHalaqoh] = useState("all");
   const [filterKelas, setFilterKelas] = useState("all");
+  const [halaqohList, setHalaqohList] = useState<Halaqoh[]>([]);
+  const [kelasList, setKelasList] = useState<Kelas[]>([]);
   
-  // State untuk 10 soal - setiap soal memiliki halaman dan pengurangan nilai
+  // Generated questions
+  const [generatedQuestions, setGeneratedQuestions] = useState<ExamQuestion[]>([]);
+  const [isQuestionsGenerated, setIsQuestionsGenerated] = useState(false);
+  
+  // State untuk 10 soal - setiap soal memiliki pengurangan nilai
   const [soalData, setSoalData] = useState<Array<{
-    halaman: string;
     pengurangan: number;
-  }>>(
-    Array.from({ length: 10 }, () => ({
-      halaman: "",
-      pengurangan: 0,
-    }))
-  );
+  }>>(Array.from({ length: 10 }, () => ({ pengurangan: 0 })));
+
+  useEffect(() => {
+    const fetchFilters = async () => {
+      const [halaqohRes, kelasRes] = await Promise.all([
+        supabase.from("halaqoh").select("id, nama_halaqoh").order("nama_halaqoh"),
+        supabase.from("kelas").select("id, nama_kelas").order("nama_kelas"),
+      ]);
+      if (halaqohRes.data) setHalaqohList(halaqohRes.data);
+      if (kelasRes.data) setKelasList(kelasRes.data);
+    };
+    fetchFilters();
+  }, []);
 
   // Dummy data
   const santriList = [
@@ -83,10 +100,22 @@ const UjianTahfidz = () => {
     { id: "3", nama: "Ustadzah Fatimah" },
   ];
 
+  // Filter riwayat
+  const [riwayatFilterHalaqoh, setRiwayatFilterHalaqoh] = useState("all");
+  const [riwayatFilterKelas, setRiwayatFilterKelas] = useState("all");
+  const [riwayatSearch, setRiwayatSearch] = useState("");
+
   const ujianHistory = [
-    { id: "1", santri: "Ahmad Fauzi", tanggal: "2024-01-15", materi: "Juz 1-2", nilaiTotal: 85, status: "Lulus" },
-    { id: "2", santri: "Muhammad Rizki", tanggal: "2024-01-14", materi: "Juz 1-2", nilaiTotal: 65, status: "Tidak Lulus" },
+    { id: "1", santri: "Ahmad Fauzi", halaqoh: "Halaqoh A", kelas: "Paket A Kelas 6", tanggal: "2024-01-15", materi: "Juz 1-2", nilaiTotal: 85, status: "Lulus" },
+    { id: "2", santri: "Muhammad Rizki", halaqoh: "Halaqoh A", kelas: "Paket A Kelas 6", tanggal: "2024-01-14", materi: "Juz 1-2", nilaiTotal: 65, status: "Mengulang" },
   ];
+
+  const filteredUjianHistory = ujianHistory.filter((item) => {
+    const matchSearch = item.santri.toLowerCase().includes(riwayatSearch.toLowerCase());
+    const matchHalaqoh = riwayatFilterHalaqoh === "all" || item.halaqoh === riwayatFilterHalaqoh;
+    const matchKelas = riwayatFilterKelas === "all" || item.kelas === riwayatFilterKelas;
+    return matchSearch && matchHalaqoh && matchKelas;
+  });
 
   const filteredSantriList = santriList.filter((s) => {
     const matchHalaqoh = filterHalaqoh === "all" || s.halaqoh === filterHalaqoh;
@@ -94,30 +123,47 @@ const UjianTahfidz = () => {
     return matchHalaqoh && matchKelas;
   });
 
+  // Generate random questions
+  const handleGenerateQuestions = useCallback(() => {
+    if (!materiDari || !materiSampai) {
+      toast.error("Pilih materi ujian (juz) terlebih dahulu");
+      return;
+    }
+    
+    const juzDari = parseInt(materiDari);
+    const juzSampai = parseInt(materiSampai);
+    
+    if (juzDari > juzSampai) {
+      toast.error("Juz awal harus lebih kecil atau sama dengan juz akhir");
+      return;
+    }
+    
+    const questions = generateExamQuestions(juzDari, juzSampai);
+    setGeneratedQuestions(questions);
+    setIsQuestionsGenerated(true);
+    setSoalData(Array.from({ length: 10 }, () => ({ pengurangan: 0 })));
+    toast.success("10 soal acak berhasil di-generate!");
+  }, [materiDari, materiSampai]);
+
+  // Regenerate questions
+  const handleRegenerateQuestions = () => {
+    handleGenerateQuestions();
+  };
+
   const handlePenguranganChange = (index: number, value: number) => {
     const newSoalData = [...soalData];
-    // Maksimal pengurangan adalah 10 (nilai penuh per soal)
     newSoalData[index].pengurangan = Math.min(Math.max(0, value), 10);
     setSoalData(newSoalData);
   };
 
-  const handleHalamanChange = (index: number, value: string) => {
-    const newSoalData = [...soalData];
-    newSoalData[index].halaman = value;
-    setSoalData(newSoalData);
-  };
-
-  // Hitung nilai per soal (10 - pengurangan)
   const getNilaiSoal = (index: number) => {
     return 10 - soalData[index].pengurangan;
   };
 
-  // Hitung total nilai
   const getTotalNilai = () => {
     return soalData.reduce((total, soal) => total + (10 - soal.pengurangan), 0);
   };
 
-  // Cek apakah lulus (KKM = 70)
   const isLulus = () => {
     return getTotalNilai() >= 70;
   };
@@ -129,11 +175,14 @@ const UjianTahfidz = () => {
       tanggal: tanggalUjian,
       materiDari,
       materiSampai,
+      generatedQuestions,
       soalData,
       totalNilai: getTotalNilai(),
-      status: isLulus() ? "Lulus" : "Tidak Lulus",
+      status: isLulus() ? "Lulus" : "Mengulang",
       catatan,
     });
+    
+    toast.success(isLulus() ? "Selamat! Santri lulus ujian tahfidz 🎉" : "Santri belum lulus. Perlu belajar lagi.");
     setIsDialogOpen(false);
     resetForm();
   };
@@ -145,12 +194,9 @@ const UjianTahfidz = () => {
     setMateriDari("");
     setMateriSampai("");
     setCatatan("");
-    setSoalData(
-      Array.from({ length: 10 }, () => ({
-        halaman: "",
-        pengurangan: 0,
-      }))
-    );
+    setGeneratedQuestions([]);
+    setIsQuestionsGenerated(false);
+    setSoalData(Array.from({ length: 10 }, () => ({ pengurangan: 0 })));
   };
 
   const selectedSantriData = santriList.find((s) => s.id === selectedSantri);
@@ -163,10 +209,10 @@ const UjianTahfidz = () => {
           <div>
             <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
               <GraduationCap className="w-7 h-7 text-purple-500" />
-              Ujian Tahfidz
+              Ujian Tahfidz Semester
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Ujian tahfidz Al-Qur'an dengan 10 soal sambung ayat
+              Ujian tahfidz Al-Qur'an dengan 10 soal sambung ayat acak
             </p>
           </div>
 
@@ -194,7 +240,7 @@ const UjianTahfidz = () => {
                       <div className="text-sm text-purple-800 dark:text-purple-200 space-y-1">
                         <p className="font-medium">Aturan Penilaian:</p>
                         <ul className="list-disc list-inside space-y-0.5 text-xs">
-                          <li>10 soal sambung ayat, masing-masing bernilai maksimal 10 poin</li>
+                          <li>10 soal sambung ayat <strong>diacak otomatis</strong> dari juz yang diujikan</li>
                           <li>Peserta melanjutkan ayat hingga 5 baris (toleransi 5.5-6 baris)</li>
                           <li>Setiap baris sempurna = 2 poin (5 baris × 2 = 10 poin)</li>
                           <li>Kesalahan setelah 3x diingatkan = -1 poin per kesalahan</li>
@@ -215,7 +261,7 @@ const UjianTahfidz = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Semua Halaqoh</SelectItem>
-                        {mockHalaqohList.map((h) => (
+                        {halaqohList.map((h) => (
                           <SelectItem key={h.id} value={h.nama_halaqoh}>
                             {h.nama_halaqoh}
                           </SelectItem>
@@ -231,8 +277,8 @@ const UjianTahfidz = () => {
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Semua Kelas</SelectItem>
-                        {mockKelasList.map((k) => (
-                          <SelectItem key={k.id} value={k.nama_kelas}>
+                        {MOCK_KELAS.map((k) => (
+                          <SelectItem key={k.id} value={k.id}>
                             {k.nama_kelas}
                           </SelectItem>
                         ))}
@@ -308,49 +354,70 @@ const UjianTahfidz = () => {
                     />
                   </div>
                   {materiDari && materiSampai && (
-                    <p className="text-sm text-muted-foreground">
-                      Materi: Juz {materiDari} - Juz {materiSampai} ({(parseInt(materiSampai) - parseInt(materiDari) + 1) * 20} halaman)
-                    </p>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground">
+                        Materi: Juz {materiDari} - Juz {materiSampai} ({
+                          Array.from({ length: parseInt(materiSampai) - parseInt(materiDari) + 1 }, (_, i) => 
+                            getHalamanPerJuz(parseInt(materiDari) + i)
+                          ).reduce((a, b) => a + b, 0)
+                        } halaman)
+                      </p>
+                      <Button 
+                        type="button" 
+                        onClick={handleGenerateQuestions}
+                        className="bg-purple-600 hover:bg-purple-700"
+                      >
+                        <Shuffle className="w-4 h-4 mr-2" />
+                        {isQuestionsGenerated ? "Acak Ulang Soal" : "Generate 10 Soal Acak"}
+                      </Button>
+                    </div>
                   )}
                 </div>
 
-                {/* 10 Soal Accordion */}
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-base font-semibold">Penilaian 10 Soal</Label>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-muted-foreground">Total Nilai:</span>
-                      <Badge
-                        variant={isLulus() ? "default" : "destructive"}
-                        className={`text-lg px-3 py-1 ${
-                          isLulus()
-                            ? "bg-green-600 hover:bg-green-700"
-                            : "bg-red-600 hover:bg-red-700"
-                        }`}
-                      >
-                        {getTotalNilai()}
-                      </Badge>
+                {/* Generated Questions */}
+                {isQuestionsGenerated && generatedQuestions.length > 0 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold">Penilaian 10 Soal</Label>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleRegenerateQuestions}
+                        >
+                          <RefreshCw className="w-4 h-4 mr-1" />
+                          Acak Ulang
+                        </Button>
+                        <span className="text-sm text-muted-foreground">Total Nilai:</span>
+                        <Badge
+                          className={`text-lg px-3 py-1 ${
+                            isLulus()
+                              ? "bg-green-600 hover:bg-green-700"
+                              : "bg-red-600 hover:bg-red-700"
+                          }`}
+                        >
+                          {getTotalNilai()}
+                        </Badge>
+                      </div>
                     </div>
-                  </div>
 
-                  <Accordion type="multiple" className="space-y-2">
-                    {soalData.map((soal, index) => (
-                      <AccordionItem
-                        key={index}
-                        value={`soal-${index}`}
-                        className="border rounded-lg px-4"
-                      >
-                        <AccordionTrigger className="hover:no-underline">
-                          <div className="flex items-center justify-between w-full pr-4">
-                            <span className="font-medium">Soal {index + 1}</span>
-                            <div className="flex items-center gap-2">
-                              {soal.halaman && (
+                    <Accordion type="multiple" className="space-y-2">
+                      {generatedQuestions.map((question, index) => (
+                        <AccordionItem
+                          key={index}
+                          value={`soal-${index}`}
+                          className="border rounded-lg px-4"
+                        >
+                          <AccordionTrigger className="hover:no-underline">
+                            <div className="flex items-center justify-between w-full pr-4">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">Soal {index + 1}</span>
                                 <span className="text-xs text-muted-foreground">
-                                  Hal. {soal.halaman}
+                                  - {question.surah.name} ayat {question.ayatStart}
                                 </span>
-                              )}
+                              </div>
                               <Badge
-                                variant={getNilaiSoal(index) === 10 ? "default" : "secondary"}
                                 className={
                                   getNilaiSoal(index) === 10
                                     ? "bg-green-600"
@@ -362,127 +429,98 @@ const UjianTahfidz = () => {
                                 {getNilaiSoal(index)}/10
                               </Badge>
                             </div>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-4 pb-4">
-                          <div className="grid grid-cols-1 gap-4">
-                            <div className="space-y-2">
-                              <Label className="text-sm">Halaman Soal</Label>
-                              <Input
-                                placeholder="Contoh: 5 atau 5-8"
-                                value={soal.halaman}
-                                onChange={(e) => handleHalamanChange(index, e.target.value)}
-                              />
-                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent className="pt-4 pb-4">
+                            <div className="space-y-4">
+                              {/* Question Info */}
+                              <div className="p-3 bg-muted rounded-lg">
+                                <p className="text-sm font-medium">Soal Sambung Ayat:</p>
+                                <p className="text-base mt-1">
+                                  <span className="font-arabic text-lg">{question.surah.arabicName}</span>
+                                  {" - "}
+                                  {question.surah.name} ayat {question.ayatStart}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  Juz {question.juz} | Estimasi halaman: {question.halamanEstimate}
+                                </p>
+                              </div>
 
-                            <div className="space-y-3">
-                              <Label className="text-sm">Pengurangan Nilai</Label>
-                              <p className="text-xs text-muted-foreground">
-                                Kurangi nilai untuk setiap kesalahan setelah 3x diingatkan (-1 per kesalahan)
-                              </p>
-                              <div className="flex items-center gap-3">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    handlePenguranganChange(index, soal.pengurangan - 1)
-                                  }
-                                  disabled={soal.pengurangan <= 0}
-                                >
-                                  -
-                                </Button>
-                                <span className="w-12 text-center font-mono text-lg">
-                                  -{soal.pengurangan}
-                                </span>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() =>
-                                    handlePenguranganChange(index, soal.pengurangan + 1)
-                                  }
-                                  disabled={soal.pengurangan >= 10}
-                                >
-                                  +
-                                </Button>
-                                <span className="text-sm text-muted-foreground ml-2">
-                                  Nilai: {getNilaiSoal(index)}/10
-                                </span>
+                              {/* Pengurangan Nilai */}
+                              <div className="space-y-3">
+                                <Label className="text-sm">Pengurangan Nilai</Label>
+                                <p className="text-xs text-muted-foreground">
+                                  Kurangi nilai untuk setiap kesalahan setelah 3x diingatkan (-1 per kesalahan)
+                                </p>
+                                <div className="flex items-center gap-3">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handlePenguranganChange(index, soalData[index].pengurangan - 1)}
+                                    disabled={soalData[index].pengurangan <= 0}
+                                  >
+                                    -
+                                  </Button>
+                                  <span className="w-12 text-center font-mono text-lg">
+                                    -{soalData[index].pengurangan}
+                                  </span>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handlePenguranganChange(index, soalData[index].pengurangan + 1)}
+                                    disabled={soalData[index].pengurangan >= 10}
+                                  >
+                                    +
+                                  </Button>
+                                  <span className="text-sm text-muted-foreground ml-2">
+                                    Nilai: {getNilaiSoal(index)}/10
+                                  </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    ))}
-                  </Accordion>
-                </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      ))}
+                    </Accordion>
+                  </div>
+                )}
 
                 {/* Ringkasan Nilai */}
-                <Card
-                  className={`${
-                    isLulus()
-                      ? "bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800"
-                      : "bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800"
-                  }`}
-                >
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {isLulus() ? (
-                          <CheckCircle2 className="w-6 h-6 text-green-600" />
-                        ) : (
-                          <AlertCircle className="w-6 h-6 text-red-600" />
-                        )}
+                {isQuestionsGenerated && (
+                  <Card className={`${isLulus() ? "bg-green-50 dark:bg-green-950/30 border-green-200" : "bg-red-50 dark:bg-red-950/30 border-red-200"}`}>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between">
                         <div>
-                          <p
-                            className={`font-semibold ${
-                              isLulus() ? "text-green-700 dark:text-green-300" : "text-red-700 dark:text-red-300"
-                            }`}
-                          >
-                            {isLulus() ? "LULUS" : "TIDAK LULUS"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">KKM: 70</p>
+                          <p className="font-medium">Total Nilai</p>
+                          <p className="text-3xl font-bold">{getTotalNilai()}/100</p>
                         </div>
+                        <Badge className={`text-lg px-4 py-2 ${isLulus() ? "bg-green-600" : "bg-red-600"}`}>
+                          {isLulus() ? "LULUS" : "MENGULANG"}
+                        </Badge>
                       </div>
-                      <div className="text-right">
-                        <p
-                          className={`text-3xl font-bold ${
-                            isLulus() ? "text-green-600" : "text-red-600"
-                          }`}
-                        >
-                          {getTotalNilai()}
-                        </p>
-                        <p className="text-xs text-muted-foreground">dari 100</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
+                )}
 
                 {/* Catatan */}
                 <div className="space-y-2">
-                  <Label>Catatan (Opsional)</Label>
+                  <Label>Catatan</Label>
                   <Textarea
-                    placeholder="Catatan tambahan untuk ujian ini..."
+                    placeholder="Catatan tambahan..."
                     value={catatan}
                     onChange={(e) => setCatatan(e.target.value)}
-                    rows={3}
                   />
                 </div>
 
-                {/* Actions */}
-                <div className="flex justify-end gap-2 pt-4">
-                  <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-                    Batal
-                  </Button>
-                  <Button
-                    onClick={handleSubmit}
-                    className="bg-purple-600 hover:bg-purple-700"
-                    disabled={!selectedSantri || !selectedAsatidz || !tanggalUjian}
-                  >
-                    Simpan Hasil Ujian
-                  </Button>
-                </div>
+                {/* Submit Button */}
+                <Button
+                  onClick={handleSubmit}
+                  className="w-full bg-purple-600 hover:bg-purple-700"
+                  disabled={!isQuestionsGenerated || !selectedSantri || !selectedAsatidz}
+                >
+                  Simpan Hasil Ujian
+                </Button>
               </div>
             </DialogContent>
           </Dialog>
@@ -494,56 +532,85 @@ const UjianTahfidz = () => {
             <CardTitle>Riwayat Ujian Tahfidz</CardTitle>
           </CardHeader>
           <CardContent>
-            <Table>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input placeholder="Cari santri..." value={riwayatSearch} onChange={e => setRiwayatSearch(e.target.value)} className="pl-10" />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="space-y-1">
+                <Label className="text-xs">Filter Halaqoh</Label>
+                <Select value={riwayatFilterHalaqoh} onValueChange={setRiwayatFilterHalaqoh}>
+                  <SelectTrigger><SelectValue placeholder="Semua Halaqoh" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Halaqoh</SelectItem>
+                    {halaqohList.map((h) => (
+                      <SelectItem key={h.id} value={h.nama_halaqoh}>{h.nama_halaqoh}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Filter Kelas</Label>
+                <Select value={riwayatFilterKelas} onValueChange={setRiwayatFilterKelas}>
+                  <SelectTrigger><SelectValue placeholder="Semua Kelas" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Kelas</SelectItem>
+                    {kelasList.map((k) => (
+                      <SelectItem key={k.id} value={k.nama_kelas}>{k.nama_kelas}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="rounded-md border">
+              <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>No</TableHead>
                   <TableHead>Santri</TableHead>
                   <TableHead>Tanggal</TableHead>
                   <TableHead>Materi</TableHead>
-                  <TableHead>Nilai</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Aksi</TableHead>
+                  <TableHead className="text-center">Nilai</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
                 </TableRow>
               </TableHeader>
+
               <TableBody>
-                {ujianHistory.map((ujian) => (
-                  <TableRow key={ujian.id}>
-                    <TableCell className="font-medium">{ujian.santri}</TableCell>
-                    <TableCell>{ujian.tanggal}</TableCell>
-                    <TableCell>{ujian.materi}</TableCell>
-                    <TableCell>
-                      <Badge
-                        className={
-                          ujian.nilaiTotal >= 70
-                            ? "bg-green-600"
-                            : "bg-red-600"
-                        }
-                      >
-                        {ujian.nilaiTotal}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={ujian.status === "Lulus" ? "default" : "destructive"}
-                        className={
-                          ujian.status === "Lulus"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
-                            : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                        }
-                      >
-                        {ujian.status}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Button variant="outline" size="sm">
-                        <Eye className="w-4 h-4 mr-1" />
-                        Detail
-                      </Button>
+                {filteredUjianHistory.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      Belum ada riwayat ujian
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredUjianHistory.map((item, index) => (
+                    <TableRow key={item.id}>
+                      <TableCell>{index + 1}</TableCell>
+                      <TableCell
+                        className="font-medium text-primary cursor-pointer hover:underline"
+                        onClick={() => {
+                          const s = getSantriByNama(item.santri);
+                          if (s) navigate(`/santri/${s.id}`);
+                        }}
+                      >{item.santri}</TableCell>
+                      <TableCell>{item.tanggal}</TableCell>
+                      <TableCell>{item.materi}</TableCell>
+                      <TableCell className="text-center font-semibold">
+                        {item.nilaiTotal}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge className={item.status === "Lulus" ? "bg-green-600" : "bg-red-600"}>
+                          {item.status}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
+            </div>
           </CardContent>
         </Card>
       </div>

@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,1128 +9,832 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Progress } from "@/components/ui/progress";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar as CalendarComponent } from "@/components/ui/calendar";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { 
-  Plus, 
-  CheckCircle, 
-  Search,
-  CalendarIcon,
-  ChevronRight,
-  Lock,
-  Unlock,
-  Target,
-  Eye,
-  X,
-  Award,
-  AlertCircle,
-  BookOpen,
-  ArrowLeft
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Switch } from "@/components/ui/switch";
+import {
+  Plus, Download, Target, Search, CalendarIcon, Unlock, Lock,
+  Save, Trophy, RotateCcw, CheckCircle, AlertCircle, X, Edit3, BookOpen, Info
 } from "lucide-react";
 import { toast } from "sonner";
-import { JuzSelector } from "@/components/JuzSelector";
-import { getSurahsByJuz, Surah } from "@/lib/quran-data";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import { JuzSelector } from "@/components/JuzSelector";
+import { useSetoranPersistence } from "@/hooks/use-setoran-persistence";
+import { MOCK_SANTRI, MOCK_HALAQOH, getSantriByNama } from "@/lib/mock-data";
+import {
+  getDrillsForJuz,
+  DrillDefinition,
+  isPageBasedDrill,
+  formatDrillDescription,
+} from "@/lib/drill-data";
+import {
+  getPageMappingByJuz,
+  getPageRangeFromAyatRange,
+  getPageSummaryByJuz,
+  getPageCountForJuz,
+  getSurahListByJuz,
+} from "@/lib/mushaf-madinah";
 
-// Types for drill progression
-interface DrillSurahEntry {
-  id: string;
-  surahNumber: number;
-  surahName: string;
-  ayatDari: number;
-  ayatSampai: number;
-}
+const BATAS_LULUS_DRILL = 88;
+const BATAS_KESALAHAN_DRILL = 12;
 
-interface DrillResult {
-  id: string;
-  tanggal: Date;
-  drillLevel: string;
-  juz: number;
-  surahs: DrillSurahEntry[];
-  jumlahKesalahan: number;
-  nilaiKelancaran: number;
-  catatanTajwid: string;
-  lulus: boolean;
-}
-
-interface DrillProgress {
-  santriId: string;
-  juz: number;
-  drill1Completed: boolean;
-  drill2Completed: boolean;
-  drillHalfJuzCompleted: boolean;
-  drillFirstHalfJuz: boolean;
-  drillSecondHalfJuz: boolean;
-  tasmi1JuzUnlocked: boolean;
-  drillResults: DrillResult[];
-}
-
-// Mock data for santri drill progress
-const mockSantriDrillProgress: DrillProgress[] = [
-  {
-    santriId: "1",
-    juz: 30,
-    drill1Completed: true,
-    drill2Completed: true,
-    drillHalfJuzCompleted: true,
-    drillFirstHalfJuz: true,
-    drillSecondHalfJuz: false,
-    tasmi1JuzUnlocked: false,
-    drillResults: [
-      {
-        id: "dr1",
-        tanggal: new Date("2025-01-02"),
-        drillLevel: "drill1",
-        juz: 30,
-        surahs: [
-          { id: "s1", surahNumber: 78, surahName: "An-Naba'", ayatDari: 1, ayatSampai: 40 },
-          { id: "s2", surahNumber: 79, surahName: "An-Nazi'at", ayatDari: 1, ayatSampai: 46 },
-        ],
-        jumlahKesalahan: 5,
-        nilaiKelancaran: 95,
-        catatanTajwid: "Perhatikan mad lazim",
-        lulus: true,
-      },
-      {
-        id: "dr2",
-        tanggal: new Date("2025-01-05"),
-        drillLevel: "drill2",
-        juz: 30,
-        surahs: [
-          { id: "s3", surahNumber: 80, surahName: "'Abasa", ayatDari: 1, ayatSampai: 42 },
-        ],
-        jumlahKesalahan: 8,
-        nilaiKelancaran: 92,
-        catatanTajwid: "",
-        lulus: true,
-      },
-    ],
-  },
-  {
-    santriId: "2",
-    juz: 30,
-    drill1Completed: true,
-    drill2Completed: false,
-    drillHalfJuzCompleted: false,
-    drillFirstHalfJuz: false,
-    drillSecondHalfJuz: false,
-    tasmi1JuzUnlocked: false,
-    drillResults: [
-      {
-        id: "dr3",
-        tanggal: new Date("2025-01-03"),
-        drillLevel: "drill1",
-        juz: 30,
-        surahs: [
-          { id: "s4", surahNumber: 78, surahName: "An-Naba'", ayatDari: 1, ayatSampai: 40 },
-        ],
-        jumlahKesalahan: 10,
-        nilaiKelancaran: 90,
-        catatanTajwid: "Perbaiki bacaan qalqalah",
-        lulus: true,
-      },
-    ],
-  },
-  {
-    santriId: "3",
-    juz: 30,
-    drill1Completed: false,
-    drill2Completed: false,
-    drillHalfJuzCompleted: false,
-    drillFirstHalfJuz: false,
-    drillSecondHalfJuz: false,
-    tasmi1JuzUnlocked: false,
-    drillResults: [],
-  },
-];
-
-const mockSantri = [
-  { id: "1", nama: "Muhammad Faiz", nis: "S001", halaqoh: "Halaqoh Al-Azhary" },
-  { id: "2", nama: "Fatimah Zahra", nis: "S003", halaqoh: "Halaqoh Al-Furqon" },
-  { id: "3", nama: "Aisyah Nur", nis: "S002", halaqoh: "Halaqoh Al-Azhary" },
-  { id: "4", nama: "Ahmad Rizky", nis: "S004", halaqoh: "Halaqoh Al-Azhary" },
-  { id: "5", nama: "Ali Akbar", nis: "S005", halaqoh: "Halaqoh Al-Furqon" },
-  { id: "6", nama: "Umar Faruq", nis: "S006", halaqoh: "Halaqoh Al-Hidayah" },
-];
-
-const halaqohOptions = ["Semua Halaqoh", "Halaqoh Al-Azhary", "Halaqoh Al-Furqon", "Halaqoh Al-Hidayah"];
-
-const BATAS_LULUS = 88;
-const BATAS_KESALAHAN = 12;
-
-function tentukanStatus(kelancaran: number, kesalahan: number) {
-  return kelancaran >= BATAS_LULUS && kesalahan <= BATAS_KESALAHAN;
-}
-
-const drillLevels = [
-  { id: "drill1", name: "Drill 1", desc: "5 Halaman / 5 Surat", icon: "📘" },
-  { id: "drill2", name: "Drill 2", desc: "5 Halaman berikutnya", icon: "📗" },
-  { id: "drillHalfJuz", name: "Drill ½ Juz", desc: "10 Halaman", icon: "📙" },
-  { id: "drillFirstHalf", name: "½ Juz Pertama", desc: "Setengah juz awal", icon: "📕" },
-  { id: "drillSecondHalf", name: "½ Juz Kedua", desc: "Setengah juz akhir", icon: "📓" },
-  { id: "tasmi1Juz", name: "Tasmi' 1 Juz", desc: "Ujian lengkap 1 juz", icon: "🏆" },
-];
-
-const getDrillLevelName = (levelId: string) => {
-  return drillLevels.find(l => l.id === levelId)?.name || levelId;
+// Drill Level Indicator - square boxes like Progress Tasmi'
+const DrillLevelIndicator = ({ juz, currentLevel }: { juz: number; currentLevel: number }) => {
+  const totalLevels = getDrillsForJuz(juz).length || 7;
+  return (
+    <div className="grid grid-cols-4 gap-0.5 w-fit">
+      {Array.from({ length: totalLevels }, (_, i) => {
+        const level = i + 1;
+        const isCurrent = level === currentLevel;
+        return (
+          <div
+            key={level}
+            className={cn(
+              "w-4 h-4 md:w-6 md:h-6 rounded-sm flex items-center justify-center text-[8px] md:text-[10px] font-semibold border",
+              isCurrent
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-muted text-muted-foreground border-border"
+            )}
+            title={`Level ${level}`}
+          >
+            {level}
+          </div>
+        );
+      })}
+    </div>
+  );
 };
 
-const DrillHafalan = () => {
-  const [search, setSearch] = useState("");
-  const [filterHalaqoh, setFilterHalaqoh] = useState("Semua Halaqoh");
-  const [selectedJuz, setSelectedJuz] = useState("30");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isDetailDialogOpen, setIsDetailDialogOpen] = useState(false);
-  const [selectedSantriDetail, setSelectedSantriDetail] = useState<string | null>(null);
-  
-  // View state: "table" or "cards"
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
-  const [selectedHalaqohForCards, setSelectedHalaqohForCards] = useState("");
+const mockDrillList = [
+  { id: 1, tanggal: "15/01/2025", santri: "Muhammad Faiz", juz: 30, level: 1, materi: "Drill 1 - An-Naba", nilai: 92, status: "Lulus" },
+  { id: 2, tanggal: "14/01/2025", santri: "Aisyah Nur", juz: 30, level: 1, materi: "Drill 1 - An-Naba", nilai: 88, status: "Lulus" },
+  { id: 3, tanggal: "13/01/2025", santri: "Fatimah Zahra", juz: 29, level: 2, materi: "Drill 2 - Hal 11-20", nilai: 75, status: "Mengulang" },
+  { id: 4, tanggal: "12/01/2025", santri: "Muhammad Faiz", juz: 30, level: 2, materi: "Drill 2 - An-Nazi'at", nilai: 95, status: "Lulus" },
+];
 
-  // Form state
-  const [selectedSantri, setSelectedSantri] = useState("");
+const DrillHafalan = () => {
+  const navigate = useNavigate();
+  const [search, setSearch] = useState("");
+  const [filterJuz, setFilterJuz] = useState("all");
+  const [filterHalaqoh, setFilterHalaqoh] = useState("all");
+
+  const { entries, addEntries } = useSetoranPersistence();
+
+  // Dialog state
+  const [isDrillDialogOpen, setIsDrillDialogOpen] = useState(false);
+
+  // Drill form state
+  const [drillFormHalaqohFilter, setDrillFormHalaqohFilter] = useState("");
+  const [drillSelectedSantri, setDrillSelectedSantri] = useState("");
   const [tanggalDrill, setTanggalDrill] = useState<Date>();
-  const [drillLevel, setDrillLevel] = useState("");
-  const [juz, setJuz] = useState("");
-  const [surahEntries, setSurahEntries] = useState<DrillSurahEntry[]>([
-    { id: "1", surahNumber: 0, surahName: "", ayatDari: 1, ayatSampai: 7 }
-  ]);
-  const [jumlahKesalahan, setJumlahKesalahan] = useState("0");
+  const [drillJuz, setDrillJuz] = useState("");
+  const [drillLevelSelected, setDrillLevelSelected] = useState("");
+  const drills: DrillDefinition[] = useMemo(() => {
+    if (!drillJuz) return [];
+    return getDrillsForJuz(Number(drillJuz));
+  }, [drillJuz]);
+  const [drillJumlahKesalahan, setDrillJumlahKesalahan] = useState("0");
   const [catatanTajwid, setCatatanTajwid] = useState("");
 
-  const surahByJuz: Surah[] = useMemo(() => {
-    if (!juz) return [];
-    return getSurahsByJuz(Number(juz));
-  }, [juz]);
+  // Page/Surah sync state for drill form
+  const [drillInputMode, setDrillInputMode] = useState<"halaman" | "surah">("halaman");
+  const [drillHalamanDari, setDrillHalamanDari] = useState("");
+  const [drillHalamanSampai, setDrillHalamanSampai] = useState("");
+  const [drillSurah, setDrillSurah] = useState("");
+  const [drillAyatDari, setDrillAyatDari] = useState("");
+  const [drillAyatSampai, setDrillAyatSampai] = useState("");
 
-  const nilaiKelancaran = Math.max(0, 100 - parseInt(jumlahKesalahan || "0"));
+  const drillSurahByJuz = useMemo(() => {
+    if (!drillJuz) return [];
+    return getSurahListByJuz(Number(drillJuz));
+  }, [drillJuz]);
 
-  // Get progress for a specific santri
-  const getSantriProgress = (santriId: string) => {
-    return mockSantriDrillProgress.find(p => p.santriId === santriId);
-  };
+  const drillSelectedSurahObj = useMemo(() => {
+    return drillSurahByJuz.find((s) => String(s.number) === drillSurah);
+  }, [drillSurah, drillSurahByJuz]);
 
-  // Check if a drill level is unlocked for a santri
-  const isDrillUnlocked = (progress: DrillProgress | undefined, level: string) => {
-    if (!progress) return level === "drill1";
-    
-    switch (level) {
-      case "drill1":
-        return true;
-      case "drill2":
-        return progress.drill1Completed;
-      case "drillHalfJuz":
-        return progress.drill1Completed && progress.drill2Completed;
-      case "drillFirstHalf":
-        return progress.drillHalfJuzCompleted;
-      case "drillSecondHalf":
-        return progress.drillHalfJuzCompleted && progress.drillFirstHalfJuz;
-      case "tasmi1Juz":
-        return progress.drillFirstHalfJuz && progress.drillSecondHalfJuz;
-      default:
-        return false;
+  const drillMaxHalaman = drillJuz ? getPageCountForJuz(Number(drillJuz)) : 20;
+
+  const drillPageInfo = useMemo(() => {
+    if (!drillJuz || !drillHalamanDari) return "";
+    return getPageSummaryByJuz(Number(drillJuz), Number(drillHalamanDari));
+  }, [drillJuz, drillHalamanDari]);
+
+  // Manual drill input state
+  const [useManualInput, setUseManualInput] = useState(false);
+  const [manualPages, setManualPages] = useState<{ id: string; page: number }[]>([]);
+  const [manualSurahs, setManualSurahs] = useState<{
+    id: string;
+    surahNumber: number;
+    surahName: string;
+    ayatStart: number;
+    ayatEnd: number;
+    fullSurah: boolean;
+  }[]>([]);
+
+  const drillNilaiKelancaran = Math.max(0, 100 - parseInt(drillJumlahKesalahan || "0"));
+
+  const isManualInputComplete = useMemo(() => {
+    if (!useManualInput) return true;
+    if (!drillLevelSelected || !drillJuz) return false;
+    const selectedDrill = drills.find(d => d.drillNumber === Number(drillLevelSelected));
+    if (!selectedDrill) return false;
+    if (selectedDrill.type === 'page') {
+      const requiredPagesCount = (selectedDrill.pageEnd ?? 0) - (selectedDrill.pageStart ?? 0) + 1;
+      const inputPagesSet = new Set(manualPages.map(p => p.page));
+      const allRequiredPages = Array.from({ length: requiredPagesCount }, (_, i) => (selectedDrill.pageStart ?? 0) + i);
+      return allRequiredPages.every(page => inputPagesSet.has(page));
     }
-  };
-
-  // Filter santri based on search and halaqoh
-  const filteredSantri = mockSantri.filter((santri) => {
-    const matchSearch = santri.nama.toLowerCase().includes(search.toLowerCase()) ||
-      santri.nis.toLowerCase().includes(search.toLowerCase());
-    const matchHalaqoh = filterHalaqoh === "Semua Halaqoh" || santri.halaqoh === filterHalaqoh;
-    return matchSearch && matchHalaqoh;
-  });
-
-  // Filter for card view
-  const filteredSantriForCards = mockSantri.filter((santri) => {
-    return santri.halaqoh === selectedHalaqohForCards;
-  });
-
-  // Get last drill info for a santri
-  const getLastDrillInfo = (santriId: string) => {
-    const progress = getSantriProgress(santriId);
-    if (!progress || progress.drillResults.length === 0) {
-      return { lastDrill: null, currentStage: "Drill 1", progressPercent: 0 };
-    }
-    
-    const lastDrill = progress.drillResults[progress.drillResults.length - 1];
-    
-    let currentStage = "Drill 1";
-    let progressPercent = 0;
-    
-    const stages = [
-      progress.drill1Completed,
-      progress.drill2Completed,
-      progress.drillHalfJuzCompleted,
-      progress.drillFirstHalfJuz,
-      progress.drillSecondHalfJuz,
-    ];
-    
-    const completed = stages.filter(Boolean).length;
-    progressPercent = completed * 20;
-    
-    if (progress.drillFirstHalfJuz && progress.drillSecondHalfJuz) {
-      currentStage = "Siap Tasmi'";
-    } else if (progress.drillSecondHalfJuz) {
-      currentStage = "Tasmi' 1 Juz";
-    } else if (progress.drillFirstHalfJuz) {
-      currentStage = "½ Juz Kedua";
-    } else if (progress.drillHalfJuzCompleted) {
-      currentStage = "½ Juz Pertama";
-    } else if (progress.drill2Completed) {
-      currentStage = "Drill ½ Juz";
-    } else if (progress.drill1Completed) {
-      currentStage = "Drill 2";
-    }
-    
-    return { lastDrill, currentStage, progressPercent };
-  };
-
-  const handleAddSurahEntry = () => {
-    setSurahEntries(prev => [
-      ...prev,
-      { id: Date.now().toString(), surahNumber: 0, surahName: "", ayatDari: 1, ayatSampai: 7 }
-    ]);
-  };
-
-  const handleRemoveSurahEntry = (id: string) => {
-    if (surahEntries.length > 1) {
-      setSurahEntries(prev => prev.filter(e => e.id !== id));
-    }
-  };
-
-  const handleSurahEntryChange = (id: string, field: keyof DrillSurahEntry, value: number | string) => {
-    setSurahEntries(prev => prev.map(entry => {
-      if (entry.id === id) {
-        if (field === "surahNumber") {
-          const surah = surahByJuz.find(s => s.number === Number(value));
-          return { 
-            ...entry, 
-            surahNumber: Number(value), 
-            surahName: surah?.name || "",
-            ayatDari: 1,
-            ayatSampai: surah?.numberOfAyahs || 7
-          };
+    if (selectedDrill.type === 'surah' && selectedDrill.surahRanges) {
+      for (const requiredSurah of selectedDrill.surahRanges) {
+        const inputSurah = manualSurahs.find(s => s.surahNumber === requiredSurah.surahNumber);
+        if (!inputSurah) return false;
+        if (requiredSurah.fullSurah) {
+          if (!inputSurah.fullSurah) return false;
+        } else {
+          const reqStart = requiredSurah.ayatStart ?? 1;
+          const reqEnd = requiredSurah.ayatEnd ?? 1;
+          if (inputSurah.ayatStart > reqStart || inputSurah.ayatEnd < reqEnd) return false;
         }
-        return { ...entry, [field]: value };
       }
-      return entry;
-    }));
+      return true;
+    }
+    return false;
+  }, [useManualInput, drillLevelSelected, drillJuz, drills, manualPages, manualSurahs]);
+
+  const filteredSantriForDrillForm = useMemo(() => {
+    if (!drillFormHalaqohFilter) return MOCK_SANTRI;
+    return MOCK_SANTRI.filter(s => s.idHalaqoh === drillFormHalaqohFilter);
+  }, [drillFormHalaqohFilter]);
+
+  const isDrillUnlocked = (santriId: string, drillNumber: number, juzNum: number) => {
+    return drillNumber === 1;
   };
 
-  const handleSubmit = () => {
-    const kelancaran = nilaiKelancaran;
-    const kesalahan = Number(jumlahKesalahan);
-    const lulus = tentukanStatus(kelancaran, kesalahan);
-
-    toast.success(
-      lulus
-        ? "Drill lulus! Santri dapat melanjutkan ke tahap berikutnya."
-        : "Drill perlu diulang. Semangat!"
-    );
-
-    setIsDialogOpen(false);
-    resetForm();
-  };
-
-  const resetForm = () => {
-    setSelectedSantri("");
+  const resetDrillForm = () => {
+    setDrillFormHalaqohFilter("");
+    setDrillSelectedSantri("");
     setTanggalDrill(undefined);
-    setDrillLevel("");
-    setJuz("");
-    setSurahEntries([{ id: "1", surahNumber: 0, surahName: "", ayatDari: 1, ayatSampai: 7 }]);
-    setJumlahKesalahan("0");
+    setDrillJuz("");
+    setDrillLevelSelected("");
+    setDrillJumlahKesalahan("0");
     setCatatanTajwid("");
+    setUseManualInput(false);
+    setManualPages([]);
+    setManualSurahs([]);
+    setDrillInputMode("halaman");
+    setDrillHalamanDari("");
+    setDrillHalamanSampai("");
+    setDrillSurah("");
+    setDrillAyatDari("");
+    setDrillAyatSampai("");
   };
 
-  const openDetailDialog = (santriId: string) => {
-    setSelectedSantriDetail(santriId);
-    setIsDetailDialogOpen(true);
+  const handleAddManualPage = () => {
+    const selectedDrill = drills.find(d => d.drillNumber === Number(drillLevelSelected));
+    const defaultPage = selectedDrill?.pageStart ?? 1;
+    setManualPages(prev => [...prev, { id: crypto.randomUUID(), page: defaultPage }]);
   };
 
-  const getSelectedSantriForDetail = () => {
-    if (!selectedSantriDetail) return null;
-    return mockSantri.find(s => s.id === selectedSantriDetail);
+  const handleUpdateManualPage = (id: string, value: number) => {
+    setManualPages(prev => prev.map(p => p.id === id ? { ...p, page: value } : p));
   };
 
-  const getSelectedProgressForDetail = () => {
-    if (!selectedSantriDetail) return null;
-    return getSantriProgress(selectedSantriDetail);
+  const handleRemoveManualPage = (id: string) => {
+    setManualPages(prev => prev.filter(p => p.id !== id));
   };
 
-  const handleOpenCards = (halaqoh: string) => {
-    setSelectedHalaqohForCards(halaqoh);
-    setViewMode("cards");
+  const handleAddManualSurah = () => {
+    const selectedDrill = drills.find(d => d.drillNumber === Number(drillLevelSelected));
+    const defaultSurah = selectedDrill?.surahRanges?.[0];
+    if (defaultSurah) {
+      setManualSurahs(prev => [...prev, {
+        id: crypto.randomUUID(),
+        surahNumber: defaultSurah.surahNumber,
+        surahName: defaultSurah.surahName,
+        ayatStart: defaultSurah.ayatStart ?? 1,
+        ayatEnd: defaultSurah.ayatEnd ?? 1,
+        fullSurah: defaultSurah.fullSurah ?? false
+      }]);
+    }
   };
 
-  const handleBackToTable = () => {
-    setViewMode("table");
-    setSelectedHalaqohForCards("");
+  const handleUpdateManualSurah = (id: string, updates: Partial<typeof manualSurahs[0]>) => {
+    setManualSurahs(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
   };
+
+  const handleRemoveManualSurah = (id: string) => {
+    setManualSurahs(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleSaveDrill = (status: "Lulus" | "Mengulang") => {
+    if (!tanggalDrill || !drillSelectedSantri || !drillJuz) {
+      toast.error("Silakan lengkapi data drill terlebih dahulu");
+      return;
+    }
+    
+    addEntries({
+      tanggal: tanggalDrill,
+      santriId: drillSelectedSantri,
+      jenis: "drill",
+      juz: Number(drillJuz),
+      halaman: drillHalamanDari && drillHalamanSampai ? `${drillHalamanDari}–${drillHalamanSampai}` : drillHalamanDari || undefined,
+      surah: drillSurahByJuz.find(s => String(s.number) === drillSurah)?.name || drillSurah || undefined,
+      surahNumber: drillSurah ? Number(drillSurah) : undefined,
+      ayatDari: drillAyatDari ? Number(drillAyatDari) : undefined,
+      ayatSampai: drillAyatSampai ? Number(drillAyatSampai) : undefined,
+      status: status,
+      catatan: catatanTajwid
+    });
+
+    toast.success("Drill berhasil disimpan ke kalender!");
+    setIsDrillDialogOpen(false);
+    resetDrillForm();
+  };
+
+  const handleLulusDrill = () => {
+    if (drillNilaiKelancaran >= BATAS_LULUS_DRILL) {
+      handleSaveDrill("Lulus");
+    }
+  };
+
+  const handleUlangiDrill = () => {
+    handleSaveDrill("Mengulang");
+  };
+
+  const handleExport = () => {
+    toast.success("Data drill berhasil diexport!");
+  };
+
+  const displayDrillList = useMemo(() => {
+    const persistedDrills = entries
+      .filter(e => e.jenis === "drill")
+      .map((e, idx) => ({
+        id: `p-${idx}`,
+        tanggal: format(e.tanggal, "dd/MM/yyyy"),
+        santri: MOCK_SANTRI.find(s => s.id === e.santriId)?.nama || "Unknown",
+        juz: e.juz || 0,
+        level: e.level || 0,
+        materi: e.surah ? `${e.surah} (Ayat ${e.ayat})` : `Halaman ${e.halaman}`,
+        nilai: e.nilai || 0,
+        status: e.status || "Lulus"
+      }));
+
+    return [...persistedDrills, ...mockDrillList];
+  }, [entries]);
+
+  const filteredDrill = displayDrillList.filter((item) => {
+    const matchSearch = item.santri.toLowerCase().includes(search.toLowerCase());
+    const matchJuz = filterJuz === "all" || item.juz === Number(filterJuz);
+    return matchSearch && matchJuz;
+  });
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-6">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div className="flex flex-col gap-3">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground">Drill Hafalan</h1>
-            <p className="text-sm md:text-base text-muted-foreground">Kelola tahapan drill hafalan santri dengan sistem checkpoint</p>
+            <h1 className="text-xl md:text-3xl font-bold text-foreground">Drill Hafalan</h1>
+            <p className="text-xs md:text-base text-muted-foreground">
+              Kelola latihan drill hafalan intensif santri
+            </p>
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button className="w-full md:w-auto bg-gradient-to-r from-green-500 to-lime-500">
-                <Plus className="w-4 h-4 mr-2" />
-                Tambah Drill
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Tambah Drill Hafalan</DialogTitle>
-                <DialogDescription>Masukkan penilaian drill hafalan untuk santri</DialogDescription>
-              </DialogHeader>
-              
-              <div className="space-y-4 py-4">
-                <div className="grid grid-cols-1 gap-4">
+
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="w-4 h-4 md:mr-2" />
+              <span className="hidden md:inline">Export</span>
+            </Button>
+
+            <Dialog open={isDrillDialogOpen} onOpenChange={setIsDrillDialogOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm">
+                  <Plus className="w-4 h-4 md:mr-2" />
+                  <span className="hidden sm:inline">Tambah Drill</span>
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Tambah Drill Hafalan</DialogTitle>
+                  <DialogDescription>
+                    Masukkan penilaian drill hafalan untuk santri
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4 py-4">
+                  {/* Filter Halaqoh */}
                   <div className="space-y-2">
-                    <Label>Pilih Santri *</Label>
-                    <Select value={selectedSantri} onValueChange={setSelectedSantri}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Pilih santri" />
-                      </SelectTrigger>
+                    <Label>Filter Halaqoh</Label>
+                    <Select
+                      value={drillFormHalaqohFilter || "all"}
+                      onValueChange={(v) => setDrillFormHalaqohFilter(v === "all" ? "" : v)}
+                    >
+                      <SelectTrigger><SelectValue placeholder="Semua Halaqoh" /></SelectTrigger>
                       <SelectContent>
-                        {mockSantri.map(santri => (
-                          <SelectItem key={santri.id} value={santri.id}>
-                            {santri.nama}
-                          </SelectItem>
+                        <SelectItem value="all">Semua Halaqoh</SelectItem>
+                        {MOCK_HALAQOH.map((h) => (
+                          <SelectItem key={h.id} value={h.id}>{h.nama}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
-                  
+
+                  {/* Santri */}
+                  <div className="space-y-2">
+                    <Label>Pilih Santri *</Label>
+                    <Select value={drillSelectedSantri} onValueChange={setDrillSelectedSantri}>
+                      <SelectTrigger><SelectValue placeholder="Pilih santri" /></SelectTrigger>
+                      <SelectContent>
+                        {filteredSantriForDrillForm.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>{s.nama} ({s.nis})</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Tanggal */}
                   <div className="space-y-2">
                     <Label>Tanggal Drill *</Label>
                     <Popover>
                       <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            "w-full justify-start text-left font-normal",
-                            !tanggalDrill && "text-muted-foreground"
-                          )}
-                        >
+                        <Button variant="outline" className={cn("w-full justify-start text-left font-normal", !tanggalDrill && "text-muted-foreground")}>
                           <CalendarIcon className="mr-2 h-4 w-4" />
                           {tanggalDrill ? format(tanggalDrill, "dd/MM/yyyy") : "Pilih tanggal"}
                         </Button>
                       </PopoverTrigger>
                       <PopoverContent className="w-auto p-0" align="start">
-                        <CalendarComponent
-                          mode="single"
-                          selected={tanggalDrill}
-                          onSelect={setTanggalDrill}
-                          initialFocus
-                          className="p-3 pointer-events-auto"
-                        />
+                        <Calendar mode="single" selected={tanggalDrill} onSelect={setTanggalDrill} initialFocus />
                       </PopoverContent>
                     </Popover>
                   </div>
-                </div>
 
-                <JuzSelector value={juz} onValueChange={setJuz} required />
+                  <JuzSelector value={drillJuz} onValueChange={setDrillJuz} required />
 
-                <div className="space-y-2">
-                  <Label>Level Drill *</Label>
-                  <Select value={drillLevel} onValueChange={setDrillLevel}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Pilih level drill" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {drillLevels.map(level => {
-                        const progress = getSantriProgress(selectedSantri);
-                        const unlocked = isDrillUnlocked(progress, level.id);
-                        return (
-                          <SelectItem 
-                            key={level.id} 
-                            value={level.id}
-                            disabled={!unlocked}
-                          >
-                            <span className="flex items-center gap-2">
-                              <span>{level.icon}</span>
-                              <span>{level.name}</span>
-                              {!unlocked && <Lock className="w-3 h-3 ml-1" />}
-                            </span>
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                </div>
+                  {/* Level Drill */}
+                  <div className="space-y-2">
+                    <Label>Level Drill</Label>
+                    <Select value={drillLevelSelected} onValueChange={setDrillLevelSelected} disabled={!drillJuz}>
+                      <SelectTrigger><SelectValue placeholder="Pilih level drill" /></SelectTrigger>
+                      <SelectContent>
+                        {drills.map(drill => {
+                          const unlocked = isDrillUnlocked(drillSelectedSantri, drill.drillNumber, Number(drillJuz));
+                          return (
+                            <SelectItem key={drill.drillNumber} value={String(drill.drillNumber)} disabled={!unlocked}>
+                              {unlocked ? <Unlock className="inline w-3 h-3 mr-1" /> : <Lock className="inline w-3 h-3 mr-1" />}
+                              Level {drill.drillNumber} — {formatDrillDescription(drill)}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-                {/* Multi Surah Selection */}
-                <Card className="border-dashed border-primary/50 bg-primary/5">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-sm">Materi Drill</CardTitle>
-                      <Button 
-                        type="button" 
-                        variant="outline" 
-                        size="sm"
-                        onClick={handleAddSurahEntry}
-                        disabled={!juz}
-                        className="h-7 text-xs"
-                      >
-                        <Plus className="w-3 h-3 mr-1" />
-                        Tambah Surat
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {surahEntries.map((entry, index) => {
-                      const selectedSurah = surahByJuz.find(s => s.number === entry.surahNumber);
-                      return (
-                        <div key={entry.id} className="space-y-3 p-3 bg-background rounded-lg border relative">
-                          {surahEntries.length > 1 && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="absolute top-2 right-2 h-6 w-6 text-muted-foreground hover:text-destructive"
-                              onClick={() => handleRemoveSurahEntry(entry.id)}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          )}
-                          
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge variant="secondary" className="text-xs">Surat {index + 1}</Badge>
+                  {/* Page/Surah sync input */}
+                  {drillJuz && drillLevelSelected && (
+                    <>
+                      <div className="flex gap-2">
+                        <Button type="button" size="sm" variant={drillInputMode === "halaman" ? "default" : "outline"} className="h-7 text-xs flex-1" onClick={() => setDrillInputMode("halaman")}>
+                          Pilih Halaman
+                        </Button>
+                        <Button type="button" size="sm" variant={drillInputMode === "surah" ? "default" : "outline"} className="h-7 text-xs flex-1" onClick={() => setDrillInputMode("surah")}>
+                          Pilih Surah & Ayat
+                        </Button>
+                      </div>
+
+                      {drillInputMode === "halaman" && (
+                        <>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Halaman dari (maks {drillMaxHalaman})</Label>
+                              <Input type="number" value={drillHalamanDari} min={1} max={drillMaxHalaman}
+                                onChange={(e) => {
+                                  setDrillHalamanDari(e.target.value);
+                                  if (e.target.value) {
+                                    const mapping = getPageMappingByJuz(Number(drillJuz), Number(e.target.value));
+                                    if (mapping) { setDrillSurah(String(mapping.surahNumber)); setDrillAyatDari(String(mapping.startAyat)); }
+                                  }
+                                }}
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Halaman sampai</Label>
+                              <Input type="number" value={drillHalamanSampai} min={Number(drillHalamanDari) || 1} max={drillMaxHalaman}
+                                onChange={(e) => {
+                                  setDrillHalamanSampai(e.target.value);
+                                  if (e.target.value) {
+                                    const mapping = getPageMappingByJuz(Number(drillJuz), Number(e.target.value));
+                                    if (mapping) { setDrillAyatSampai(String(mapping.endAyat)); }
+                                  }
+                                }}
+                              />
+                            </div>
                           </div>
+                          {drillPageInfo && (
+                            <div className="flex items-start gap-2 p-2 bg-primary/10 rounded text-xs text-foreground">
+                              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary" />
+                              <span>Isi halaman: <strong>{drillPageInfo}</strong></span>
+                            </div>
+                          )}
+                          {drillSurah && drillAyatDari && (
+                            <div className="flex items-start gap-2 p-2 bg-muted/50 rounded text-xs text-muted-foreground">
+                              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                              <span>📖 Surah {drillSurahByJuz.find(s => String(s.number) === drillSurah)?.name || drillSurah}, Ayat {drillAyatDari}{drillAyatSampai ? `–${drillAyatSampai}` : ""}</span>
+                            </div>
+                          )}
+                        </>
+                      )}
 
+                      {drillInputMode === "surah" && (
+                        <>
                           <div className="space-y-2">
-                            <Label className="text-xs">Nama Surah *</Label>
-                            <Select 
-                              value={entry.surahNumber ? String(entry.surahNumber) : ""} 
-                              onValueChange={(v) => handleSurahEntryChange(entry.id, "surahNumber", v)}
-                              disabled={!juz}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder={juz ? "Pilih surah" : "Pilih juz dulu"} />
-                              </SelectTrigger>
+                            <Label className="text-xs">Surah</Label>
+                            <Select value={drillSurah} onValueChange={(val) => { setDrillSurah(val); setDrillAyatDari("1"); setDrillAyatSampai("1"); setDrillHalamanDari(""); setDrillHalamanSampai(""); }}>
+                              <SelectTrigger className="h-9"><SelectValue placeholder="Pilih surah" /></SelectTrigger>
                               <SelectContent>
-                                {surahByJuz.map((s) => (
-                                  <SelectItem key={s.number} value={String(s.number)}>
-                                    {s.number}. {s.name}
-                                  </SelectItem>
+                                {drillSurahByJuz.map((s) => (
+                                  <SelectItem key={s.number} value={String(s.number)}>{s.number}. {s.name}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           </div>
-
-                          {selectedSurah && (
-                            <div className="p-2 bg-primary/10 rounded border border-primary/20">
-                              <p className="text-xs">
-                                {selectedSurah.name} ({selectedSurah.arabicName}) – {selectedSurah.numberOfAyahs} ayat
-                              </p>
+                          {drillSelectedSurahObj && (
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Ayat dari</Label>
+                                <Input type="number" value={drillAyatDari} min={1} max={drillSelectedSurahObj.numberOfAyahs}
+                                  onChange={(e) => {
+                                    setDrillAyatDari(e.target.value);
+                                    if (e.target.value && drillAyatSampai) {
+                                      const pr = getPageRangeFromAyatRange(Number(drillJuz), Number(drillSurah), Number(e.target.value), Number(drillAyatSampai));
+                                      if (pr) { setDrillHalamanDari(String(pr.dari)); setDrillHalamanSampai(String(pr.sampai)); }
+                                    }
+                                  }}
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Ayat sampai</Label>
+                                <Input type="number" value={drillAyatSampai} min={Number(drillAyatDari)} max={drillSelectedSurahObj.numberOfAyahs}
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value);
+                                    if (val >= Number(drillAyatDari)) {
+                                      setDrillAyatSampai(e.target.value);
+                                      const pr = getPageRangeFromAyatRange(Number(drillJuz), Number(drillSurah), Number(drillAyatDari), val);
+                                      if (pr) { setDrillHalamanDari(String(pr.dari)); setDrillHalamanSampai(String(pr.sampai)); }
+                                    }
+                                  }}
+                                />
+                              </div>
                             </div>
                           )}
-
-                          <div className="grid grid-cols-2 gap-3">
-                            <div className="space-y-1">
-                              <Label className="text-xs">Ayat Dari *</Label>
-                              <Input
-                                type="number"
-                                min={1}
-                                max={selectedSurah?.numberOfAyahs}
-                                value={entry.ayatDari}
-                                onChange={(e) => handleSurahEntryChange(entry.id, "ayatDari", Number(e.target.value))}
-                                disabled={!selectedSurah}
-                                className="h-9"
-                              />
+                          {drillHalamanDari && (
+                            <div className="flex items-start gap-2 p-2 bg-muted/50 rounded text-xs text-muted-foreground">
+                              <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                              <span>📖 Halaman {drillHalamanDari}{drillHalamanSampai && drillHalamanSampai !== drillHalamanDari ? `–${drillHalamanSampai}` : ""} (dalam juz)</span>
                             </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Ayat Sampai *</Label>
-                              <Input
-                                type="number"
-                                min={entry.ayatDari}
-                                max={selectedSurah?.numberOfAyahs}
-                                value={entry.ayatSampai}
-                                onChange={(e) => handleSurahEntryChange(entry.id, "ayatSampai", Number(e.target.value))}
-                                disabled={!selectedSurah}
-                                className="h-9"
-                              />
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </CardContent>
-                </Card>
-
-                {/* Penilaian Section */}
-                <div className="pt-4 border-t space-y-4">
-                  <h4 className="font-semibold">Penilaian</h4>
-                  
-                  <div className="space-y-2">
-                    <Label>Jumlah Kesalahan *</Label>
-                    <Input 
-                      type="number" 
-                      value={jumlahKesalahan}
-                      onChange={(e) => setJumlahKesalahan(e.target.value)}
-                      min="0"
-                    />
-                    <p className="text-xs text-muted-foreground">Setiap kesalahan -1 poin dari 100</p>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                    <Label>Nilai Kelancaran</Label>
-                    <span className={cn(
-                      "text-2xl font-bold",
-                      nilaiKelancaran >= BATAS_LULUS ? "text-green-600" : "text-destructive"
-                    )}>
-                      {nilaiKelancaran}
-                    </span>
-                  </div>
-
-                  {/* Kunci Kelulusan Info */}
-                  <Card className={cn(
-                    "p-3 border-2",
-                    nilaiKelancaran >= BATAS_LULUS 
-                      ? "border-green-500 bg-green-50 dark:bg-green-950/30" 
-                      : "border-destructive bg-destructive/10"
-                  )}>
-                    <div className="flex items-start gap-3">
-                      {nilaiKelancaran >= BATAS_LULUS ? (
-                        <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
-                      ) : (
-                        <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                          )}
+                        </>
                       )}
-                      <div>
-                        <p className="font-medium text-sm">
-                          {nilaiKelancaran >= BATAS_LULUS ? "Memenuhi syarat lulus" : "Belum memenuhi syarat lulus"}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Batas lulus: Minimal nilai <strong>{BATAS_LULUS}</strong> dan maksimal <strong>{BATAS_KESALAHAN}</strong> kesalahan
-                        </p>
-                      </div>
+                    </>
+                  )}
+
+                  {/* Info Drill */}
+                  {drillLevelSelected && drillJuz && (() => {
+                    const selectedDrill = drills.find(d => d.drillNumber === Number(drillLevelSelected));
+                    if (!selectedDrill) return null;
+
+                    if (selectedDrill.type === 'page') {
+                      return (
+                        <>
+                          <Card className="border-dashed border-primary/50">
+                            <CardContent className="p-4">
+                              <div className="flex items-center gap-3">
+                                <BookOpen className="w-5 h-5 text-primary" />
+                                <div>
+                                  <p className="font-medium">Target Drill: Halaman</p>
+                                  <p className="text-sm text-muted-foreground">
+                                    Halaman {selectedDrill.pageStart} – {selectedDrill.pageEnd}
+                                  </p>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+                            <div className="flex items-center gap-2">
+                              <Edit3 className="w-4 h-4 text-muted-foreground" />
+                              <Label htmlFor="manual-input" className="text-sm cursor-pointer">Input Manual</Label>
+                            </div>
+                            <Switch id="manual-input" checked={useManualInput} onCheckedChange={(checked) => { setUseManualInput(checked); if (!checked) setManualPages([]); }} />
+                          </div>
+
+                          {useManualInput && (
+                            <Card className="border-dashed border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20">
+                              <CardHeader className="pb-2">
+                                <div className="flex justify-between items-center">
+                                  <CardTitle className="text-sm flex items-center gap-2"><Edit3 className="w-4 h-4" />Input Halaman Manual</CardTitle>
+                                  <Button size="sm" variant="outline" onClick={handleAddManualPage} className="h-7"><Plus className="w-3 h-3 mr-1" />Tambah</Button>
+                                </div>
+                              </CardHeader>
+                              <CardContent className="space-y-2">
+                                {manualPages.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground text-center py-2">Klik "Tambah" untuk menambahkan halaman</p>
+                                ) : (
+                                  manualPages.map((mp, index) => (
+                                    <div key={mp.id} className="flex items-center gap-2">
+                                      <span className="text-xs text-muted-foreground w-6">{index + 1}.</span>
+                                      <Input type="number" value={mp.page} min={selectedDrill.pageStart} max={selectedDrill.pageEnd} onChange={(e) => handleUpdateManualPage(mp.id, Number(e.target.value))} className="h-9 flex-1" />
+                                      <Button size="icon" variant="ghost" onClick={() => handleRemoveManualPage(mp.id)} className="h-9 w-9 text-destructive hover:text-destructive"><X className="w-4 h-4" /></Button>
+                                    </div>
+                                  ))
+                                )}
+                              </CardContent>
+                            </Card>
+                          )}
+                        </>
+                      );
+                    }
+
+                    if (selectedDrill.type === 'surah' && selectedDrill.surahRanges) {
+                      return (
+                        <>
+                          <Card className="border-dashed border-primary/50">
+                            <CardContent className="p-4">
+                              <div className="flex items-start gap-3">
+                                <Target className="w-5 h-5 text-primary mt-0.5" />
+                                <div className="space-y-1">
+                                  <p className="font-medium">Target Drill: Surat</p>
+                                  <div className="text-sm text-muted-foreground space-y-0.5">
+                                    {selectedDrill.surahRanges.map((s, i) => (
+                                      <p key={i}>• {s.surahName}{s.fullSurah ? " (1 surat penuh)" : ` ayat ${s.ayatStart}–${s.ayatEnd}`}</p>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+
+                          <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/50">
+                            <div className="flex items-center gap-2">
+                              <Edit3 className="w-4 h-4 text-muted-foreground" />
+                              <Label htmlFor="manual-input-surah" className="text-sm cursor-pointer">Input Manual</Label>
+                            </div>
+                            <Switch id="manual-input-surah" checked={useManualInput} onCheckedChange={(checked) => { setUseManualInput(checked); if (!checked) setManualSurahs([]); }} />
+                          </div>
+
+                          {useManualInput && (
+                            <Card className="border-dashed border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20">
+                              <CardHeader className="pb-2">
+                                <div className="flex justify-between items-center">
+                                  <CardTitle className="text-sm flex items-center gap-2"><Edit3 className="w-4 h-4" />Input Surat Manual</CardTitle>
+                                  <Button size="sm" variant="outline" onClick={handleAddManualSurah} className="h-7"><Plus className="w-3 h-3 mr-1" />Tambah</Button>
+                                </div>
+                              </CardHeader>
+                              <CardContent className="space-y-3">
+                                {manualSurahs.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground text-center py-2">Klik "Tambah" untuk menambahkan surat</p>
+                                ) : (
+                                  manualSurahs.map((ms, index) => (
+                                    <div key={ms.id} className="p-3 border rounded-lg bg-background space-y-2">
+                                      <div className="flex items-center justify-between">
+                                        <span className="text-xs font-medium text-muted-foreground">Surat {index + 1}</span>
+                                        <Button size="icon" variant="ghost" onClick={() => handleRemoveManualSurah(ms.id)} className="h-7 w-7 text-destructive hover:text-destructive"><X className="w-3 h-3" /></Button>
+                                      </div>
+                                      <Select value={String(ms.surahNumber)} onValueChange={(v) => {
+                                        const surah = selectedDrill.surahRanges?.find(s => s.surahNumber === Number(v));
+                                        if (surah) handleUpdateManualSurah(ms.id, { surahNumber: surah.surahNumber, surahName: surah.surahName, fullSurah: surah.fullSurah ?? false, ayatStart: surah.ayatStart ?? 1, ayatEnd: surah.ayatEnd ?? 1 });
+                                      }}>
+                                        <SelectTrigger className="h-9"><SelectValue placeholder="Pilih Surat" /></SelectTrigger>
+                                        <SelectContent>
+                                          {selectedDrill.surahRanges?.map((surah) => (
+                                            <SelectItem key={surah.surahNumber} value={String(surah.surahNumber)}>{surah.surahName}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <div className="flex items-center gap-2">
+                                        <Switch id={`fullSurah-${ms.id}`} checked={ms.fullSurah} onCheckedChange={(checked) => handleUpdateManualSurah(ms.id, { fullSurah: checked })} />
+                                        <Label htmlFor={`fullSurah-${ms.id}`} className="text-xs">Surat penuh</Label>
+                                      </div>
+                                      {!ms.fullSurah && (
+                                        <div className="flex items-center gap-2">
+                                          <div className="flex-1">
+                                            <Label className="text-xs text-muted-foreground">Ayat mulai</Label>
+                                            <Input type="number" value={ms.ayatStart} min={1} onChange={(e) => handleUpdateManualSurah(ms.id, { ayatStart: Number(e.target.value) })} className="h-8" />
+                                          </div>
+                                          <span className="text-muted-foreground mt-5">–</span>
+                                          <div className="flex-1">
+                                            <Label className="text-xs text-muted-foreground">Ayat akhir</Label>
+                                            <Input type="number" value={ms.ayatEnd} min={ms.ayatStart} onChange={(e) => handleUpdateManualSurah(ms.id, { ayatEnd: Number(e.target.value) })} className="h-8" />
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))
+                                )}
+                              </CardContent>
+                            </Card>
+                          )}
+                        </>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {/* Penilaian */}
+                  <div className="pt-4 border-t space-y-4">
+                    <h4 className="font-semibold">Penilaian</h4>
+                    <div className="space-y-2">
+                      <Label>Jumlah Kesalahan *</Label>
+                      <Input type="number" value={drillJumlahKesalahan} min={0} onChange={(e) => setDrillJumlahKesalahan(e.target.value)} />
                     </div>
-                  </Card>
-
-                  <div className="space-y-2">
-                    <Label>Catatan Tajwid</Label>
-                    <Textarea 
-                      placeholder="Catatan perbaikan tajwid..."
-                      value={catatanTajwid}
-                      onChange={(e) => setCatatanTajwid(e.target.value)}
-                    />
+                    <div className="flex justify-between p-3 bg-muted rounded-lg">
+                      <Label>Nilai Kelancaran</Label>
+                      <span className={cn("text-xl font-bold", drillNilaiKelancaran >= BATAS_LULUS_DRILL ? "text-green-600" : "text-destructive")}>{drillNilaiKelancaran}</span>
+                    </div>
+                    <Card className={cn("p-3 border-2", drillNilaiKelancaran >= BATAS_LULUS_DRILL ? "border-green-500 bg-green-50" : "border-destructive bg-destructive/10")}>
+                      <div className="flex gap-3">
+                        {drillNilaiKelancaran >= BATAS_LULUS_DRILL ? <CheckCircle className="text-green-600" /> : <AlertCircle className="text-destructive" />}
+                        <div className="text-sm">Batas lulus: {BATAS_LULUS_DRILL} | Maks kesalahan: {BATAS_KESALAHAN_DRILL}</div>
+                      </div>
+                    </Card>
+                    <div className="space-y-2">
+                      <Label>Catatan Tajwid</Label>
+                      <Textarea value={catatanTajwid} onChange={(e) => setCatatanTajwid(e.target.value)} />
+                    </div>
                   </div>
-                </div>
 
-                <Button onClick={handleSubmit} className="w-full bg-primary hover:bg-primary/90">
-                  Simpan Drill
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+                  {/* Actions */}
+                  <div className="grid grid-cols-3 gap-2 pt-4">
+                    <Button variant="outline" onClick={() => handleSaveDrill("Mengulang")}><Save className="w-4 h-4 mr-1" /> Simpan</Button>
+                    <Button className="bg-green-600 hover:bg-green-700 disabled:opacity-50" disabled={drillNilaiKelancaran < BATAS_LULUS_DRILL || !isManualInputComplete} onClick={handleLulusDrill}><Trophy className="w-4 h-4 mr-1" /> Lulus</Button>
+                    <Button variant="destructive" onClick={handleUlangiDrill}><RotateCcw className="w-4 h-4 mr-1" /> Ulangi</Button>
+                  </div>
+
+                  {useManualInput && !isManualInputComplete && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 text-center">
+                      ⚠️ Input manual belum lengkap. Lengkapi semua target drill untuk bisa lulus.
+                    </p>
+                  )}
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
-        {viewMode === "table" ? (
-          /* Table View */
-          <div className="bg-card rounded-lg border border-border p-4 md:p-6">
-            <div className="flex flex-col sm:flex-row gap-4 mb-6">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Cari santri..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="pl-10"
-                />
+        {/* Stats */}
+        <div className="grid grid-cols-3 gap-2 md:gap-4">
+          <Card>
+            <CardContent className="p-3 md:p-4">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <Target className="w-4 h-4 md:w-5 md:h-5 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-lg md:text-2xl font-bold">{mockDrillList.length}</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground truncate">Total Drill</p>
+                </div>
               </div>
-              <Select value={filterHalaqoh} onValueChange={setFilterHalaqoh}>
-                <SelectTrigger className="w-full sm:w-[200px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {halaqohOptions.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {option}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={selectedJuz} onValueChange={setSelectedJuz}>
-                <SelectTrigger className="w-full sm:w-[120px]">
-                  <SelectValue placeholder="Juz" />
-                </SelectTrigger>
-                <SelectContent>
-                  {Array.from({ length: 30 }, (_, i) => (
-                    <SelectItem key={i + 1} value={String(i + 1)}>Juz {i + 1}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 md:p-4">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-green-500/10 flex items-center justify-center shrink-0">
+                  <Trophy className="w-4 h-4 md:w-5 md:h-5 text-green-600" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-lg md:text-2xl font-bold">{mockDrillList.filter(d => d.status === "Lulus").length}</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground truncate">Lulus</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-3 md:p-4">
+              <div className="flex items-center gap-2 md:gap-3">
+                <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
+                  <RotateCcw className="w-4 h-4 md:w-5 md:h-5 text-destructive" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-lg md:text-2xl font-bold">{mockDrillList.filter(d => d.status === "Mengulang").length}</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground truncate">Mengulang</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-            {/* Desktop Table */}
-            <div className="hidden md:block">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-muted-foreground">NIS</TableHead>
-                    <TableHead className="text-muted-foreground">Nama Santri</TableHead>
-                    <TableHead className="text-muted-foreground">Halaqoh</TableHead>
-                    <TableHead className="text-muted-foreground">Tahap Saat Ini</TableHead>
-                    <TableHead className="text-muted-foreground">Drill Terakhir</TableHead>
-                    <TableHead className="text-muted-foreground">Nilai</TableHead>
-                    <TableHead className="text-muted-foreground">Progress</TableHead>
-                    <TableHead className="text-muted-foreground">Aksi</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredSantri.map((santri) => {
-                    const { lastDrill, currentStage, progressPercent } = getLastDrillInfo(santri.id);
-                    return (
-                      <TableRow key={santri.id}>
-                        <TableCell className="font-medium">{santri.nis}</TableCell>
-                        <TableCell className="text-primary font-medium">{santri.nama}</TableCell>
-                        <TableCell>
-                          <Button
-                            variant="link"
-                            className="p-0 h-auto text-primary hover:underline"
-                            onClick={() => handleOpenCards(santri.halaqoh)}
-                          >
-                            {santri.halaqoh}
-                          </Button>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-xs">
-                            {currentStage}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {lastDrill ? (
-                            <div className="text-sm">
-                              <p className="font-medium">{getDrillLevelName(lastDrill.drillLevel)}</p>
-                              <p className="text-xs text-muted-foreground">{format(lastDrill.tanggal, "dd/MM/yyyy")}</p>
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {lastDrill ? (
-                            <Badge className={cn(
-                              lastDrill.lulus ? "bg-green-500" : "bg-destructive"
-                            )}>
-                              {lastDrill.nilaiKelancaran}
-                            </Badge>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Progress value={progressPercent} className="h-2 w-16" />
-                            <span className="text-xs text-muted-foreground">{progressPercent}%</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => openDetailDialog(santri.id)}
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            Detail
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+        {/* Filters */}
+        <Card>
+          <CardContent className="p-3 md:pt-4 md:p-6">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-4">
+              <div className="relative col-span-2 md:col-span-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input placeholder="Cari santri..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10 h-9 md:h-10 text-sm" />
+              </div>
+              <Select value={filterJuz} onValueChange={setFilterJuz}>
+                <SelectTrigger className="h-9 md:h-10 text-sm">
+                  <SelectValue placeholder="Semua Juz" />
+                </SelectTrigger>
 
-            {/* Mobile Cards */}
-            <div className="md:hidden space-y-3">
-              {filteredSantri.map((santri) => {
-                const { lastDrill, currentStage, progressPercent } = getLastDrillInfo(santri.id);
-                return (
-                  <Card key={santri.id} className="p-4">
-                    <div className="flex items-start justify-between mb-3">
-                      <div>
-                        <p className="font-semibold text-primary">{santri.nama}</p>
-                        <p className="text-xs text-muted-foreground">{santri.nis} • {santri.halaqoh}</p>
-                      </div>
-                      <Badge variant="outline" className="text-xs">
-                        {currentStage}
-                      </Badge>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 mb-3 text-sm">
-                      <div>
-                        <p className="text-muted-foreground text-xs">Drill Terakhir</p>
-                        <p className="font-medium">{lastDrill ? getDrillLevelName(lastDrill.drillLevel) : "-"}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs">Nilai</p>
-                        {lastDrill ? (
-                          <Badge className={cn(
-                            "text-xs",
-                            lastDrill.lulus ? "bg-green-500" : "bg-destructive"
-                          )}>
-                            {lastDrill.nilaiKelancaran}
-                          </Badge>
-                        ) : (
-                          <span>-</span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 flex-1">
-                        <Progress value={progressPercent} className="h-2" />
-                        <span className="text-xs text-muted-foreground">{progressPercent}%</span>
-                      </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm"
-                        className="ml-3"
-                        onClick={() => openDetailDialog(santri.id)}
+                <SelectContent className="w-[260px] p-2">
+                  <div className="grid grid-cols-6 gap-1">
+
+                    {Array.from({ length: 30 }, (_, i) => (
+                      <SelectItem
+                        key={i + 1}
+                        value={String(i + 1)}
+                        className="justify-center text-center"
                       >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </Card>
-                );
-              })}
+                        {i + 1}
+                      </SelectItem>
+                    ))}
+                    
+                    <SelectItem value="all" className="justify-center text-center">
+                      Semua Juz
+                    </SelectItem>
+
+                  </div>
+                </SelectContent>
+              </Select>
+              <Select value={filterHalaqoh} onValueChange={setFilterHalaqoh}>
+                <SelectTrigger className="h-9 md:h-10 text-sm"><SelectValue placeholder="Halaqoh" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Semua Halaqoh</SelectItem>
+                  {MOCK_HALAQOH.map(h => (
+                    <SelectItem key={h.id} value={h.id}>{h.nama}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          </div>
-        ) : (
-          /* Cards View - Per Halaqoh */
-          <div className="space-y-4">
-            <Button variant="outline" onClick={handleBackToTable} className="mb-2">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Kembali ke Tabel
-            </Button>
-            
-            <Card>
-              <CardHeader className="bg-gradient-to-r from-green-500 to-lime-500 text-white rounded-t-lg">
-                <CardTitle>{selectedHalaqohForCards}</CardTitle>
-                <CardDescription className="text-white/80">
-                  {filteredSantriForCards.length} santri • Juz {selectedJuz}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 space-y-4">
-                {filteredSantriForCards.map(santri => {
-                  const progress = getSantriProgress(santri.id) || {
-                    santriId: santri.id,
-                    juz: Number(selectedJuz),
-                    drill1Completed: false,
-                    drill2Completed: false,
-                    drillHalfJuzCompleted: false,
-                    drillFirstHalfJuz: false,
-                    drillSecondHalfJuz: false,
-                    tasmi1JuzUnlocked: false,
-                    drillResults: [],
-                  };
-
-                  const totalTahap = [
-                    progress.drill1Completed,
-                    progress.drill2Completed,
-                    progress.drillHalfJuzCompleted,
-                    progress.drillFirstHalfJuz,
-                    progress.drillSecondHalfJuz,
-                  ].filter(Boolean).length;
-
-                  const tasmiUnlocked =
-                    progress.tasmi1JuzUnlocked ||
-                    (progress.drillFirstHalfJuz && progress.drillSecondHalfJuz);
-
-                  const { lastDrill } = getLastDrillInfo(santri.id);
-
-                  return (
-                    <Card key={santri.id} className="overflow-hidden border-l-4 border-l-primary">
-                      <CardContent className="p-4 space-y-4">
-                        {/* Header */}
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="font-bold">{santri.nama}</h3>
-                            <p className="text-xs text-muted-foreground">{santri.nis}</p>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => openDetailDialog(santri.id)}
-                          >
-                            <Eye className="w-4 h-4 mr-1" />
-                            Detail
-                          </Button>
-                        </div>
-
-                        {/* Last Drill Info */}
-                        {lastDrill && (
-                          <div className="p-3 bg-muted/50 rounded-lg">
-                            <p className="text-xs text-muted-foreground mb-1">Drill Terakhir</p>
-                            <div className="flex items-center justify-between">
-                              <div>
-                                <p className="font-medium text-sm">{getDrillLevelName(lastDrill.drillLevel)}</p>
-                                <p className="text-xs text-muted-foreground">{format(lastDrill.tanggal, "dd/MM/yyyy")}</p>
-                              </div>
-                              <Badge className={cn(
-                                lastDrill.lulus ? "bg-green-500" : "bg-destructive"
-                              )}>
-                                Nilai: {lastDrill.nilaiKelancaran}
-                              </Badge>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Drill Progress */}
-                        <div className="space-y-2">
-                          <p className="text-xs font-medium text-muted-foreground uppercase">Tahapan Drill</p>
-                          <div className="grid grid-cols-2 gap-2">
-                            <DrillCheckbox label="Drill 1" desc="5 Halaman" checked={progress.drill1Completed} unlocked />
-                            <DrillCheckbox label="Drill 2" desc="5 Halaman" checked={progress.drill2Completed} unlocked={progress.drill1Completed} />
-                          </div>
-                          <DrillCheckbox label="Drill ½ Juz" desc="10 Halaman" checked={progress.drillHalfJuzCompleted} unlocked={progress.drill1Completed && progress.drill2Completed} fullWidth />
-                          <div className="grid grid-cols-2 gap-2">
-                            <DrillCheckbox label="½ Juz Pertama" desc="Awal" checked={progress.drillFirstHalfJuz} unlocked={progress.drillHalfJuzCompleted} />
-                            <DrillCheckbox label="½ Juz Kedua" desc="Akhir" checked={progress.drillSecondHalfJuz} unlocked={progress.drillHalfJuzCompleted && progress.drillFirstHalfJuz} />
-                          </div>
-                        </div>
-
-                        {/* Tasmi Status */}
-                        <div className={cn(
-                          "p-3 rounded-lg border-2",
-                          tasmiUnlocked 
-                            ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" 
-                            : "border-muted bg-muted/30"
-                        )}>
-                          <div className="flex items-center gap-3">
-                            <div className={cn(
-                              "w-8 h-8 rounded-full flex items-center justify-center",
-                              tasmiUnlocked ? "bg-amber-400 text-white" : "bg-muted"
-                            )}>
-                              {tasmiUnlocked ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4 text-muted-foreground" />}
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-semibold text-sm">🏆 Tasmi' 1 Juz</p>
-                              <p className="text-xs text-muted-foreground">
-                                {tasmiUnlocked ? "Siap ujian!" : "Selesaikan drill dulu"}
-                              </p>
-                            </div>
-                            {tasmiUnlocked && (
-                              <Button size="sm" className="bg-amber-500 hover:bg-amber-600">
-                                <Target className="w-4 h-4" />
-                              </Button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="pt-2 border-t">
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="text-muted-foreground">Progress</span>
-                            <span className="font-medium">{totalTahap}/5 tahap</span>
-                          </div>
-                          <Progress value={totalTahap * 20} className="h-2" />
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-
-        {/* Info Card */}
-        <Card className="bg-muted/50">
-          <CardContent className="p-4">
-            <h4 className="font-semibold mb-2">ℹ️ Sistem Checkpoint Drill</h4>
-            <ul className="space-y-1 text-sm text-muted-foreground">
-              <li>• <strong>Drill 1:</strong> 5 halaman atau 5 surat pertama</li>
-              <li>• <strong>Drill 2:</strong> 5 halaman/surat berikutnya (unlock setelah Drill 1)</li>
-              <li>• <strong>Drill ½ Juz:</strong> 10 halaman gabungan (unlock setelah Drill 1 & 2)</li>
-              <li>• <strong>Persiapan 1 Juz:</strong> Drill setengah juz pertama, lalu kedua</li>
-              <li>• <strong>Tasmi' 1 Juz:</strong> Ujian lengkap 1 juz (unlock setelah semua drill)</li>
-              <li className="pt-2 border-t mt-2">
-                <strong>Syarat Lulus:</strong> Nilai minimal {BATAS_LULUS} dan maksimal {BATAS_KESALAHAN} kesalahan
-              </li>
-            </ul>
           </CardContent>
         </Card>
 
-        {/* Detail Dialog */}
-        <Dialog open={isDetailDialogOpen} onOpenChange={setIsDetailDialogOpen}>
-          <DialogContent className="max-w-lg max-h-[90vh]">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Award className="w-5 h-5 text-amber-500" />
-                Hasil Drill Hafalan
-              </DialogTitle>
-              <DialogDescription>
-                {getSelectedSantriForDetail()?.nama} - Juz {selectedJuz}
-              </DialogDescription>
-            </DialogHeader>
-            
-            <ScrollArea className="max-h-[60vh]">
-              <div className="space-y-4 pr-4">
-                {/* Progress Summary */}
-                <Card className="bg-muted/50">
-                  <CardContent className="p-4">
-                    <h4 className="font-semibold mb-3">Status Tahapan Drill</h4>
-                    <div className="space-y-2">
-                      {drillLevels.slice(0, 5).map(level => {
-                        const progress = getSelectedProgressForDetail();
-                        let completed = false;
-                        if (progress) {
-                          switch (level.id) {
-                            case "drill1": completed = progress.drill1Completed; break;
-                            case "drill2": completed = progress.drill2Completed; break;
-                            case "drillHalfJuz": completed = progress.drillHalfJuzCompleted; break;
-                            case "drillFirstHalf": completed = progress.drillFirstHalfJuz; break;
-                            case "drillSecondHalf": completed = progress.drillSecondHalfJuz; break;
-                          }
-                        }
-                        return (
-                          <div key={level.id} className="flex items-center justify-between p-2 rounded bg-background">
-                            <div className="flex items-center gap-2">
-                              <span>{level.icon}</span>
-                              <span className="text-sm font-medium">{level.name}</span>
-                            </div>
-                            <Badge variant={completed ? "default" : "secondary"} className={cn(
-                              completed && "bg-green-500"
-                            )}>
-                              {completed ? "Lulus" : "Belum"}
-                            </Badge>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Drill Results */}
-                <div className="space-y-3">
-                  <h4 className="font-semibold">Riwayat Penilaian Drill</h4>
-                  {getSelectedProgressForDetail()?.drillResults?.length ? (
-                    getSelectedProgressForDetail()?.drillResults.map(result => (
-                      <Card key={result.id} className={cn(
-                        "border-l-4",
-                        result.lulus ? "border-l-green-500" : "border-l-destructive"
-                      )}>
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-3">
-                            <div>
-                              <div className="flex items-center gap-2 mb-1">
-                                <Badge variant="outline">{getDrillLevelName(result.drillLevel)}</Badge>
-                                <Badge variant={result.lulus ? "default" : "destructive"} className={cn(
-                                  result.lulus && "bg-green-500"
-                                )}>
-                                  {result.lulus ? "LULUS" : "ULANG"}
-                                </Badge>
-                              </div>
-                              <p className="text-xs text-muted-foreground flex items-center gap-1">
-                                <CalendarIcon className="w-3 h-3" />
-                                {format(result.tanggal, "dd MMMM yyyy")}
-                              </p>
-                            </div>
-                            <div className="text-right">
-                              <p className={cn(
-                                "text-2xl font-bold",
-                                result.nilaiKelancaran >= BATAS_LULUS ? "text-green-600" : "text-destructive"
-                              )}>
-                                {result.nilaiKelancaran}
-                              </p>
-                              <p className="text-xs text-muted-foreground">{result.jumlahKesalahan} kesalahan</p>
-                            </div>
-                          </div>
-
-                          {/* Surahs */}
-                          <div className="space-y-2 mb-3">
-                            <p className="text-xs font-medium text-muted-foreground uppercase">Materi Disetorkan:</p>
-                            {result.surahs.map((surah) => (
-                              <div key={surah.id} className="flex items-center gap-2 p-2 bg-muted/50 rounded text-sm">
-                                <BookOpen className="w-4 h-4 text-primary" />
-                                <span className="font-medium">{surah.surahName}</span>
-                                <span className="text-muted-foreground">
-                                  Ayat {surah.ayatDari} - {surah.ayatSampai}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-
-                          {result.catatanTajwid && (
-                            <div className="p-2 bg-amber-50 dark:bg-amber-950/30 rounded border border-amber-200 dark:border-amber-800">
-                              <p className="text-xs font-medium text-amber-700 dark:text-amber-300 mb-1">Catatan Tajwid:</p>
-                              <p className="text-sm text-amber-900 dark:text-amber-100">{result.catatanTajwid}</p>
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    ))
+        {/* Table */}
+        <Card>
+          <CardHeader className="pb-2 md:pb-4">
+            <CardTitle className="text-base md:text-lg">Riwayat Drill</CardTitle>
+            <CardDescription className="text-xs md:text-sm">Daftar semua drill hafalan santri</CardDescription>
+          </CardHeader>
+          <CardContent className="p-2 md:p-6">
+            <div className="rounded-md border overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-xs md:text-sm hidden md:table-cell">Tanggal</TableHead>
+                    <TableHead className="text-xs md:text-sm">Santri</TableHead>
+                    <TableHead className="text-xs md:text-sm">Juz</TableHead>
+                    <TableHead className="text-xs md:text-sm">Level</TableHead>
+                    <TableHead className="text-xs md:text-sm hidden md:table-cell">Materi</TableHead>
+                    <TableHead className="text-xs md:text-sm hidden sm:table-cell">Nilai</TableHead>
+                    <TableHead className="text-xs md:text-sm">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredDrill.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8 text-sm">
+                        Belum ada data drill
+                      </TableCell>
+                    </TableRow>
                   ) : (
-                    <Card className="border-dashed">
-                      <CardContent className="p-6 text-center text-muted-foreground">
-                        <BookOpen className="w-10 h-10 mx-auto mb-2 opacity-50" />
-                        <p>Belum ada riwayat drill</p>
-                      </CardContent>
-                    </Card>
+                    filteredDrill.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="text-xs md:text-sm hidden md:table-cell">{item.tanggal}</TableCell>
+                        <TableCell
+                          className="font-medium text-primary text-xs md:text-sm max-w-[80px] md:max-w-none truncate cursor-pointer hover:underline"
+                          onClick={() => {
+                            const s = getSantriByNama(item.santri);
+                            if (s) navigate(`/santri/${s.id}`);
+                          }}
+                        >{item.santri}</TableCell>
+                        <TableCell>
+                          <Badge className="bg-primary/10 text-primary border-primary text-[10px] md:text-xs">{item.juz}</Badge>
+                        </TableCell>
+                        <TableCell className="p-2 md:p-4">
+                          <DrillLevelIndicator juz={item.juz} currentLevel={item.level} />
+                        </TableCell>
+                        <TableCell className="text-xs md:text-sm hidden md:table-cell">{item.materi}</TableCell>
+                        <TableCell className="font-semibold text-primary text-xs md:text-sm hidden sm:table-cell">{item.nilai}</TableCell>
+                        <TableCell>
+                          <Badge className={cn(
+                            "text-[10px] md:text-xs",
+                            item.status === "Lulus" ? "bg-primary text-primary-foreground" : "bg-destructive text-destructive-foreground"
+                          )}>{item.status}</Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
                   )}
-                </div>
-              </div>
-            </ScrollArea>
-          </DialogContent>
-        </Dialog>
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </Layout>
   );
 };
-
-// Drill Checkbox Component
-interface DrillCheckboxProps {
-  label: string;
-  desc: string;
-  checked: boolean;
-  unlocked: boolean;
-  fullWidth?: boolean;
-}
-
-const DrillCheckbox = ({ label, desc, checked, unlocked, fullWidth }: DrillCheckboxProps) => (
-  <div className={cn(
-    "flex items-center gap-2 p-2 rounded-lg border transition-all",
-    checked 
-      ? "bg-green-50 border-green-300 dark:bg-green-950/30 dark:border-green-700" 
-      : unlocked 
-        ? "bg-background border-border" 
-        : "bg-muted/50 border-muted opacity-60",
-    fullWidth && "col-span-2"
-  )}>
-    <div className={cn(
-      "w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0",
-      checked 
-        ? "bg-green-500 text-white" 
-        : unlocked 
-          ? "bg-muted border border-border" 
-          : "bg-muted"
-    )}>
-      {checked ? (
-        <CheckCircle className="w-3 h-3" />
-      ) : unlocked ? null : (
-        <Lock className="w-2.5 h-2.5 text-muted-foreground" />
-      )}
-    </div>
-    <div className="min-w-0">
-      <p className={cn(
-        "font-medium text-xs truncate",
-        !unlocked && "text-muted-foreground"
-      )}>
-        {label}
-      </p>
-      <p className="text-[10px] text-muted-foreground truncate">{desc}</p>
-    </div>
-  </div>
-);
 
 export default DrillHafalan;

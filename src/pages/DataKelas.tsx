@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { MOCK_USTADZ } from "@/lib/mock-data";
+import { usePagination } from "@/hooks/use-pagination";
+import { TablePagination } from "@/components/TablePagination";
 import { Layout } from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,33 +21,63 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Plus, Pencil, Trash2, GraduationCap } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface Kelas {
   id: string;
   nama_kelas: string;
   deskripsi: string | null;
+  id_wali_kelas: string | null;
   created_at: string;
 }
 
-// Mock data sementara - akan diganti dengan data dari database
-const mockKelasList: Kelas[] = [
-  { id: "1", nama_kelas: "KBTK A", deskripsi: "Kelas KBTK bagian A", created_at: "2024-01-01" },
-  { id: "2", nama_kelas: "KBTK B", deskripsi: "Kelas KBTK bagian B", created_at: "2024-01-01" },
-  { id: "3", nama_kelas: "Paket A Kelas 6", deskripsi: "Setara SD Kelas 6", created_at: "2024-01-01" },
-  { id: "4", nama_kelas: "Paket B Kelas 8", deskripsi: "Setara SMP Kelas 8", created_at: "2024-01-01" },
-  { id: "5", nama_kelas: "Paket B Kelas 9", deskripsi: "Setara SMP Kelas 9", created_at: "2024-01-01" },
-];
 
 export default function DataKelas() {
-  const [kelasList, setKelasList] = useState<Kelas[]>(mockKelasList);
-  const [isLoading] = useState(false);
+  const [kelasList, setKelasList] = useState<Kelas[]>([]);
+  const ustadzList = MOCK_USTADZ;
+  const [isLoading, setIsLoading] = useState(true);
+  const pagination = usePagination(kelasList);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedKelas, setSelectedKelas] = useState<Kelas | null>(null);
   const [namaKelas, setNamaKelas] = useState("");
   const [deskripsi, setDeskripsi] = useState("");
+  const [waliKelas, setWaliKelas] = useState("");
+
+  const fetchKelas = async () => {
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from("kelas")
+      .select("*")
+      .order("nama_kelas");
+
+    if (error) {
+      console.error("Error fetching kelas:", error);
+      toast.error("Gagal memuat data kelas");
+    } else {
+      setKelasList((data as Kelas[]) || []);
+    }
+    setIsLoading(false);
+  };
+
+
+  useEffect(() => {
+    fetchKelas();
+  }, []);
+
+  const getWaliName = (id: string | null) => {
+    if (!id) return "-";
+    return ustadzList.find(u => u.id === id)?.nama || "-";
+  };
 
   const handleSubmit = async () => {
     if (!namaKelas.trim()) {
@@ -52,22 +85,37 @@ export default function DataKelas() {
       return;
     }
 
+    const payload: any = {
+      nama_kelas: namaKelas,
+      deskripsi: deskripsi || null,
+      id_wali_kelas: waliKelas || null,
+    };
+
     if (isEditMode && selectedKelas) {
-      setKelasList(prev => prev.map(k => 
-        k.id === selectedKelas.id 
-          ? { ...k, nama_kelas: namaKelas, deskripsi: deskripsi || null }
-          : k
-      ));
-      toast.success("Kelas berhasil diupdate");
+      const { error } = await supabase
+        .from("kelas")
+        .update(payload)
+        .eq("id", selectedKelas.id);
+
+      if (error) {
+        console.error("Error updating kelas:", error);
+        toast.error("Gagal mengupdate kelas");
+      } else {
+        toast.success("Kelas berhasil diupdate");
+        fetchKelas();
+      }
     } else {
-      const newKelas: Kelas = {
-        id: Date.now().toString(),
-        nama_kelas: namaKelas,
-        deskripsi: deskripsi || null,
-        created_at: new Date().toISOString(),
-      };
-      setKelasList(prev => [...prev, newKelas]);
-      toast.success("Kelas berhasil ditambahkan");
+      const { error } = await supabase
+        .from("kelas")
+        .insert(payload);
+
+      if (error) {
+        console.error("Error creating kelas:", error);
+        toast.error("Gagal menambah kelas");
+      } else {
+        toast.success("Kelas berhasil ditambahkan");
+        fetchKelas();
+      }
     }
 
     resetForm();
@@ -78,19 +126,29 @@ export default function DataKelas() {
     setSelectedKelas(kelas);
     setNamaKelas(kelas.nama_kelas);
     setDeskripsi(kelas.deskripsi || "");
+    setWaliKelas(kelas.id_wali_kelas || "");
     setIsEditMode(true);
     setIsDialogOpen(true);
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Apakah Anda yakin ingin menghapus kelas ini?")) return;
-    setKelasList(prev => prev.filter(k => k.id !== id));
-    toast.success("Kelas berhasil dihapus");
+
+    const { error } = await supabase.from("kelas").delete().eq("id", id);
+
+    if (error) {
+      console.error("Error deleting kelas:", error);
+      toast.error("Gagal menghapus kelas");
+    } else {
+      toast.success("Kelas berhasil dihapus");
+      fetchKelas();
+    }
   };
 
   const resetForm = () => {
     setNamaKelas("");
     setDeskripsi("");
+    setWaliKelas("");
     setSelectedKelas(null);
     setIsEditMode(false);
   };
@@ -113,7 +171,7 @@ export default function DataKelas() {
             if (!open) resetForm();
           }}>
             <DialogTrigger asChild>
-              <Button className="bg-primary hover:bg-primary/90">
+              <Button>
                 <Plus className="w-4 h-4 mr-2" />
                 Tambah Kelas
               </Button>
@@ -141,6 +199,22 @@ export default function DataKelas() {
                     onChange={(e) => setDeskripsi(e.target.value)}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label>Wali Kelas</Label>
+                  <Select value={waliKelas} onValueChange={setWaliKelas}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Pilih wali kelas (opsional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">— Tidak ada —</SelectItem>
+                      {ustadzList.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.nama}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                     Batal
@@ -164,47 +238,58 @@ export default function DataKelas() {
               Belum ada data kelas. Klik "Tambah Kelas" untuk menambahkan.
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-muted-foreground">No</TableHead>
-                  <TableHead className="text-muted-foreground">Nama Kelas</TableHead>
-                  <TableHead className="text-muted-foreground">Deskripsi</TableHead>
-                  <TableHead className="text-muted-foreground">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {kelasList.map((kelas, index) => (
-                  <TableRow key={kelas.id}>
-                    <TableCell>{index + 1}</TableCell>
-                    <TableCell className="font-semibold">{kelas.nama_kelas}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {kelas.deskripsi || "-"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => handleEdit(kelas)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          onClick={() => handleDelete(kelas.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </TableCell>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>No</TableHead>
+                    <TableHead>Nama Kelas</TableHead>
+                    <TableHead>Deskripsi</TableHead>
+                    <TableHead>Wali Kelas</TableHead>
+                    <TableHead>Aksi</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {pagination.paginatedItems.map((kelas, index) => (
+                    <TableRow key={kelas.id}>
+                      <TableCell>{pagination.startIndex + index + 1}</TableCell>
+                      <TableCell className="font-semibold">{kelas.nama_kelas}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {kelas.deskripsi || "-"}
+                      </TableCell>
+                      <TableCell>{getWaliName(kelas.id_wali_kelas)}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8"
+                            onClick={() => handleEdit(kelas)}
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => handleDelete(kelas.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <TablePagination
+                currentPage={pagination.currentPage}
+                totalPages={pagination.totalPages}
+                totalItems={pagination.totalItems}
+                startIndex={pagination.startIndex}
+                onPageChange={pagination.setCurrentPage}
+              />
+            </>
           )}
         </div>
       </div>

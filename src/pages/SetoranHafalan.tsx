@@ -1,490 +1,597 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+
 import { Layout } from "@/components/Layout";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { Plus, Download, Edit, Trash2, BookOpen, CalendarIcon } from "lucide-react";
-import { toast } from "sonner";
-import { JuzSelector } from "@/components/JuzSelector";
-import { getSurahsByJuz, Surah } from "@/lib/quran-data";
-import { format } from "date-fns";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  ChevronLeft,
+  ChevronRight,
+  BookOpen,
+  RefreshCw,
+  BookMarked,
+  Home,
+  User,
+} from "lucide-react";
+import { MonthlyCalendar } from "@/components/setoran/MonthlyCalendar";
+import { MobileCalendar } from "@/components/setoran/MobileCalendar";
+import { EntryModal } from "@/components/setoran/EntryModal";
+import { EntryHistoryPopup } from "@/components/setoran/EntryHistoryPopup";
+import { type CalendarEntry } from "@/components/setoran/CalendarCell";
+import { MOCK_SANTRI, MOCK_HALAQOH, getSantriByHalaqoh } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import { AddDrillModal } from "@/components/setoran/AddDrillModal";
+import { TasmiForm1Juz } from "@/components/tasmi/TasmiForm1Juz";
+import { TasmiForm5Juz } from "@/components/tasmi/TasmiForm5Juz";
+import { TilawatiUjianForm } from "@/components/tilawah/TilawatiUjianForm";
+import { TilawahSetoranForm } from "@/components/tilawah/TilawahSetoranForm";
+import { useSetoranPersistence } from "@/hooks/use-setoran-persistence";
+import { toast } from "sonner";
 
-// Mock data for setoran
-const mockSetoran = [
-  { id: 1, tanggal: "15/12/2025", santri: "Muhammad Faiz", ustadz: "Ustadz Ahmad Fauzi", juz: 3, ayatDari: 101, ayatSampai: 200, nilai: 95, status: "Lancar", catatan: "Sempurna!" },
-  { id: 2, tanggal: "13/12/2025", santri: "Fatimah Zahra", ustadz: "Ustadz Budi Santoso", juz: 4, ayatDari: 1, ayatSampai: 70, nilai: 96, status: "Lancar", catatan: "Allahu Akbar" },
-  { id: 3, tanggal: "12/12/2025", santri: "Muhammad Faiz", ustadz: "Ustadz Ahmad Fauzi", juz: 3, ayatDari: 51, ayatSampai: 100, nilai: 92, status: "Lancar", catatan: "Masya Allah" },
-  { id: 4, tanggal: "11/12/2025", santri: "Aisyah Nur", ustadz: "Ustadz Muhammad Yusuf", juz: 3, ayatDari: 1, ayatSampai: 70, nilai: 95, status: "Lancar", catatan: "Allahu Akbar" },
-  { id: 5, tanggal: "09/12/2025", santri: "Fatimah Zahra", ustadz: "Ustadz Budi Santoso", juz: 3, ayatDari: 61, ayatSampai: 130, nilai: 78, status: "Kurang", catatan: "Barakallah" },
-  { id: 6, tanggal: "07/12/2025", santri: "Muhammad Faiz", ustadz: "Ustadz Ahmad Fauzi", juz: 3, ayatDari: 1, ayatSampai: 50, nilai: 85, status: "Lancar", catatan: "Baik sekali" },
-];
 
-const mockSantri = [
-  { id: "1", nama: "Muhammad Faiz", nis: "S001", halaqoh: "Halaqoh Al-Azhary" },
-  { id: "2", nama: "Fatimah Zahra", nis: "S003", halaqoh: "Halaqoh Al-Furqon" },
-  { id: "3", nama: "Aisyah Nur", nis: "S002", halaqoh: "Halaqoh Al-Azhary" },
-];
+type MainTab = "setoran_hafalan" | "murojaah" | "tilawah" | "murojaah_rumah";
 
-const BATAS_LANCAR_SETORAN = 80;
+const HEADER_TITLES: Record<MainTab, string> = {
+  setoran_hafalan: "SETORAN HAFALAN",
+  murojaah: "MUROJAAH DI SEKOLAH",
+  tilawah: "SETORAN TILAWAH",
+  murojaah_rumah: "MUROJAAH DI RUMAH",
+};
 
-function tentukanStatusSetoran(nilai: number): "Lancar" | "Kurang" {
-  return nilai >= BATAS_LANCAR_SETORAN ? "Lancar" : "Kurang";
-}
+// Sub-type options per tab
+const SUB_OPTIONS: Record<MainTab, { value: string; label: string }[]> = {
+  setoran_hafalan: [
+    { value: "setoran_hafalan", label: "Setoran Hafalan" },
+    { value: "drill", label: "Drill Hafalan" },
+    { value: "tasmi", label: "Ujian Tasmi'" },
+    { value: "tasmi5juz", label: "Tasmi' 5 Juz" },
+  ],
+  murojaah: [],
+  tilawah: [
+    { value: "tilawah_harian", label: "Setoran Tilawah Harian" },
+    { value: "ujian_jilid", label: "Ujian Kenaikan Jilid" },
+  ],
+  murojaah_rumah: [],
+};
 
 const SetoranHafalan = () => {
-  const [filterJuz, setFilterJuz] = useState("all");
-  const [filterSantri, setFilterSantri] = useState("all");
-  const [filterHalaqoh, setFilterHalaqoh] = useState("all");
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
-  // Form state
+  const now = new Date();
+  const isMobile = useIsMobile();
+  const [activeTab, setActiveTab] = useState<MainTab>("setoran_hafalan");
+  const [subType, setSubType] = useState("setoran_hafalan");
+  const [month, setMonth] = useState(now.getMonth());
+  const [year, setYear] = useState(now.getFullYear());
+
+  // Filters
+  const [selectedHalaqoh, setSelectedHalaqoh] = useState("");
   const [selectedSantri, setSelectedSantri] = useState("");
-  const [tanggalSetoran, setTanggalSetoran] = useState<Date>();
-  const [modePilihan, setModePilihan] = useState("surah");
-  const [juz, setJuz] = useState("");
-  const [surah, setSurah] = useState("");
-  const [ayatDari, setAyatDari] = useState("1");
-  const [ayatSampai, setAyatSampai] = useState("7");
-  const [jumlahKesalahan, setJumlahKesalahan] = useState("0");
-  const [catatanTajwid, setCatatanTajwid] = useState("");
 
-  const selectedSantriData = mockSantri.find(s => s.id === selectedSantri);
-  
-  // Surah by Juz
-  const surahByJuz: Surah[] = useMemo(() => {
-    if (!juz) return [];
-    return getSurahsByJuz(Number(juz));
-  }, [juz]);
+  // Modal
+  const [modalDate, setModalDate] = useState<Date | null>(null);
 
-  // Selected Surah
-  const selectedSurah = useMemo(() => {
-    return surahByJuz.find(s => s.number === Number(surah));
-  }, [surah, surahByJuz]);
+  const [openEntry, setOpenEntry] = useState(false);
+  const [openDrill, setOpenDrill] = useState(false);
+  const [openTasmi, setOpenTasmi] = useState(false);
+  const [openTasmi5Juz, setOpenTasmi5Juz] = useState(false);
+  const [openTilawah, setOpenTilawah] = useState(false);
+  const [openUjianJilid, setOpenUjianJilid] = useState(false);
+  const [openHistory, setOpenHistory] = useState(false);
 
-  // Nilai Kelancaran
-  const nilaiKelancaran = Math.max(0, 100 - parseInt(jumlahKesalahan || "0"));
-  const selisihNilai = Math.max(0, BATAS_LANCAR_SETORAN - nilaiKelancaran);
+  // Read tasmi registered candidates from localStorage
+  const registeredCandidates = useMemo(() => {
+    try {
+      const stored = localStorage.getItem("tasmi-registered-candidates");
+      return stored ? JSON.parse(stored) as string[] : [];
+    } catch { return [] as string[]; }
+  }, [openTasmi, openTasmi5Juz]);
 
-  const handleExport = () => {
-    toast.success("Data setoran berhasil diexport!");
+  // Tasmi' component state
+  const dummySantri = useMemo(() => MOCK_SANTRI.map(s => ({
+    id: s.id,
+    nama: s.nama,
+    halaqoh: MOCK_HALAQOH.find(h => h.id === s.idHalaqoh)?.nama || "-",
+    kelas: "-",
+    juzSelesai: []
+  })), []);
+  const getPredikat = (nilai: number): { label: string; color: string; passed: boolean } => {
+    if (nilai >= 93) return { label: "Mumtaz Murtafi'", color: "bg-emerald-500", passed: true };
+    if (nilai >= 86) return { label: "Mumtaz", color: "bg-green-500", passed: true };
+    if (nilai >= 78) return { label: "Jayyid Jiddan", color: "bg-blue-500", passed: true };
+    if (nilai >= 70) return { label: "Jayyid", color: "bg-amber-500", passed: true };
+    return { label: "Mengulang", color: "bg-red-500", passed: false };
   };
 
-  const handleSubmit = () => {
-    if (!tanggalSetoran || !selectedSantriData) return;
+  // Ujian kenaikan jilid state
+  const [remedialTarget, setRemedialTarget] = useState<any>(null);
 
-    // 🔹 hitung nilai & status
-    const nilai = nilaiKelancaran;
-    const status = tentukanStatusSetoran(nilai);
+  // Global entries storage
+  const { entries, addEntries, deleteEntry } = useSetoranPersistence();
 
-    // 🔹 DATA BARU
-    const dataBaru = {
-      id: Date.now(),
-      tanggal: format(tanggalSetoran, "dd/MM/yyyy"),
-      santri: selectedSantriData.nama,
-      ustadz: "Ustadz Penguji",
-      juz: Number(juz),
-      ayatDari: Number(ayatDari),
-      ayatSampai: Number(ayatSampai),
-      nilai,
-      status,
-      selisih: status === "Kurang" ? selisihNilai : 0,
-      catatan: catatanTajwid,
+  const santriList = useMemo(() => {
+    if (!selectedHalaqoh) return MOCK_SANTRI;
+    return getSantriByHalaqoh(selectedHalaqoh);
+  }, [selectedHalaqoh]);
+
+  const santriData = MOCK_SANTRI.find((s) => s.id === selectedSantri);
+
+  // Filter entries for current tab and santri - each tab has its own calendar
+  const filteredEntries = useMemo(() => {
+    if (!selectedSantri) return [];
+
+    // Map tab to allowed jenis
+    const tabJenisMap: Record<MainTab, string[]> = {
+      setoran_hafalan: ["setoran_hafalan", "drill", "tasmi", "tasmi5juz"],
+      murojaah: ["murojaah"],
+      tilawah: ["tilawah", "ujian_jilid"],
+      murojaah_rumah: ["murojaah_rumah"],
     };
 
-    console.log("SETORAN BARU:", dataBaru);
+    const allowedJenis = tabJenisMap[activeTab] || [];
 
-    toast.success(
-      status === "Lancar"
-        ? "Setoran lancar, bisa ditingkatkan lagi 💪"
-        : `Setoran dicatat, kurang ${selisihNilai} poin ✍️`
+    return entries.filter(
+      (e) =>
+        e.santriId === selectedSantri &&
+        allowedJenis.includes(e.jenis)
     );
+  }, [entries, selectedSantri, activeTab]);
 
-    setIsDialogOpen(false);
-
-    // 🔹 reset form
-    setSelectedSantri("");
-    setTanggalSetoran(undefined);
-    setJuz("");
-    setSurah("");
-    setAyatDari("1");
-    setAyatSampai("7");
-    setJumlahKesalahan("0");
-    setCatatanTajwid("");
+  // Get entries for a specific date (for history popup)
+  const getEntriesForDate = (date: Date) => {
+    if (!date) return [];
+    const dateStr = format(date, "yyyy-MM-dd");
+    return filteredEntries.filter(
+      (e) => format(e.tanggal, "yyyy-MM-dd") === dateStr
+    );
   };
 
-  const handleDelete = (id: number) => {
-    toast.success("Setoran berhasil dihapus!");
+  const handlePrevMonth = () => {
+    if (month === 0) {
+      setMonth(11);
+      setYear(year - 1);
+    } else {
+      setMonth(month - 1);
+    }
   };
+
+  const handleNextMonth = () => {
+    if (month === 11) {
+      setMonth(0);
+      setYear(year + 1);
+    } else {
+      setMonth(month + 1);
+    }
+  };
+
+  const handleDateClick = useCallback(
+    (date: Date) => {
+      if (!selectedSantri) return;
+
+      setModalDate(date);
+
+      // Check if this date already has an entry for this tab
+      const dateStr = format(date, "yyyy-MM-dd");
+      const existingEntries = filteredEntries.filter(
+        (e) => format(e.tanggal, "yyyy-MM-dd") === dateStr
+      );
+
+      // If already has entry, show history popup
+      if (existingEntries.length > 0) {
+        setOpenHistory(true);
+        return;
+      }
+
+      if (activeTab === "setoran_hafalan") {
+        if (subType === "drill") {
+          setOpenDrill(true);
+        } else if (subType === "tasmi") {
+          if (!registeredCandidates.includes(selectedSantri)) {
+            toast.warning("Santri belum terdaftar sebagai peserta Tasmi'. Daftarkan terlebih dahulu di halaman Ujian Tasmi'.");
+            return;
+          }
+          setOpenTasmi(true);
+        } else if (subType === "tasmi5juz") {
+          if (!registeredCandidates.includes(selectedSantri)) {
+            toast.warning("Santri belum terdaftar sebagai peserta Tasmi'. Daftarkan terlebih dahulu di halaman Ujian Tasmi'.");
+            return;
+          }
+          setOpenTasmi5Juz(true);
+        } else {
+          setOpenEntry(true);
+        }
+        return;
+      }
+
+      if (activeTab === "tilawah") {
+        if (subType === "tilawah_harian") {
+          setOpenTilawah(true);
+        } else if (subType === "ujian_jilid") {
+          setOpenUjianJilid(true);
+        }
+        return;
+      }
+
+      // Tab lainnya tetap pakai entry modal
+      setOpenEntry(true);
+    },
+    [selectedSantri, activeTab, subType, filteredEntries]
+  );
+
+  const handleSaveEntry = useCallback(
+    (data: any | any[]) => {
+      const dataArray = Array.isArray(data) ? data : [data];
+      const newEntries = dataArray.map((item) => ({
+        tanggal: item.tanggal,
+        santriId: selectedSantri,
+        jenis: item.jenis,
+        juz: item.juz,
+        surah: item.surah,
+        surahNumber: item.surahNumber,
+        halaman: item.halaman,
+        ayat: item.ayat,
+        ayatDari: item.ayatDari,
+        ayatSampai: item.ayatSampai,
+        jilid: item.jilid,
+        status: item.status,
+        catatan: item.catatan,
+      }));
+      addEntries(newEntries);
+    },
+    [selectedSantri, addEntries]
+  );
+
+  const handleDeleteEntry = useCallback(
+    (entry: CalendarEntry) => {
+      deleteEntry(entry);
+      setOpenHistory(false);
+    },
+    [deleteEntry]
+  );
+
+  const monthOptions = [
+    "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+    "Juli", "Agustus", "September", "Oktober", "November", "Desember",
+  ];
+
+  const currentYear = now.getFullYear();
+  const yearOptions = Array.from({ length: 5 }, (_, i) => currentYear - 2 + i);
+
+  const subOpts = SUB_OPTIONS[activeTab];
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="space-y-4 md:space-y-5">
         {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">Setoran Hafalan</h1>
-            <p className="text-muted-foreground">Kelola dan catat setoran hafalan Al-Qur'an santri</p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleExport}>
-              <Download className="w-4 h-4 mr-2" />
-              Export
-            </Button>
-            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-              <DialogTrigger asChild>
-                <Button className="bg-gradient-to-r from-green-500 to-lime-500">
-                  <Plus className="w-4 h-4 mr-2" />
-                  Tambah Setoran
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <BookOpen className="w-5 h-5" />
-                    Tambah Setoran Hafalan
-                  </DialogTitle>
-                </DialogHeader>
-                
-                <div className="space-y-6 py-4">
-                  {/* Informasi Santri */}
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <span className="text-muted-foreground">👤</span> Informasi Santri
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <Label>Pilih Santri *</Label>
-                          <Select value={selectedSantri} onValueChange={setSelectedSantri}>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Pilih santri" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {mockSantri.map(santri => (
-                                <SelectItem key={santri.id} value={santri.id}>
-                                  {santri.nama} - {santri.nis}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Tanggal Setoran *</Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  "w-full justify-start text-left font-normal",
-                                  !tanggalSetoran && "text-muted-foreground"
-                                )}
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {tanggalSetoran ? format(tanggalSetoran, "dd/MM/yyyy") : "Pilih tanggal"}
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={tanggalSetoran}
-                                onSelect={setTanggalSetoran}
-                                initialFocus
-                                className="p-3 pointer-events-auto"
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </div>
-                      {selectedSantriData && (
-                        <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
-                          <p className="text-sm">Halaqoh: <span className="font-medium">{selectedSantriData.halaqoh}</span></p>
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  {/* Detail Hafalan */}
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-sm font-medium flex items-center gap-2">
-                        <BookOpen className="w-4 h-4 text-muted-foreground" />
-                        Detail Hafalan
-                      </CardTitle>
-                      <CardDescription>Pilih mode setoran dan detail hafalan</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Mode Pilihan *</Label>
-                        <Select value={modePilihan} onValueChange={setModePilihan}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="surah">📖 Pilih per Surah & Ayat</SelectItem>
-                            <SelectItem value="halaman">📄 Pilih per Halaman</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      
-                      <JuzSelector value={juz} onValueChange={setJuz} required />
-
-                      {/* Surah Selection Card */}
-                      <Card className="border-dashed border-yellow-400 bg-yellow-50/50 dark:bg-yellow-950/20">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-sm">Surah #1</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-4">
-                          <div className="space-y-2">
-                            <Label>Nama Surah *</Label>
-                            <Select
-                              value={surah}
-                              onValueChange={setSurah}
-                              disabled={!juz}
-                            >
-                              <SelectTrigger>
-                                <SelectValue placeholder={juz ? "Pilih surah" : "Pilih juz dulu"} />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {surahByJuz.map((s) => (
-                                  <SelectItem key={s.number} value={String(s.number)}>
-                                    {s.number}. {s.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <p className="text-xs text-muted-foreground">
-                              Menampilkan surah dalam Juz {juz || "-"}
-                            </p>
-                          </div>
-
-                          {selectedSurah && (
-                            <div className="p-2 bg-primary/10 rounded border border-primary/20">
-                              <p className="text-sm">
-                                {selectedSurah.name} ({selectedSurah.arabicName}) – Jumlah ayat:{" "}
-                                {selectedSurah.numberOfAyahs}
-                              </p>
-                            </div>
-                          )}
-
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="space-y-1">
-                              <Label className="text-xs">Ayat Dari *</Label>
-                              <Input
-                                type="number"
-                                min={1}
-                                max={selectedSurah?.numberOfAyahs}
-                                value={ayatDari}
-                                onChange={(e) => setAyatDari(e.target.value)}
-                                disabled={!selectedSurah}
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-xs">Ayat Sampai *</Label>
-                              <Input
-                                type="number"
-                                min={Number(ayatDari)}
-                                max={selectedSurah?.numberOfAyahs}
-                                value={ayatSampai}
-                                onChange={(e) => setAyatSampai(e.target.value)}
-                                disabled={!selectedSurah}
-                              />
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-
-                      <Button variant="outline" className="w-full border-dashed">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Tambah Surah Lain
-                      </Button>
-                    </CardContent>
-                  </Card>
-
-                  {/* Penilaian Section */}
-                  <div className="pt-4 border-t">
-                    <h4 className="font-semibold mb-4">Penilaian</h4>
-                    
-                    <div className="space-y-4">
-                      <div className="space-y-2">
-                        <Label>Jumlah Kesalahan *</Label>
-                        <Input 
-                          type="number" 
-                          value={jumlahKesalahan}
-                          onChange={(e) => setJumlahKesalahan(e.target.value)}
-                          min="0"
-                        />
-                        <p className="text-xs text-muted-foreground">Setiap kesalahan mengurangi 1 poin dari nilai 100</p>
-                      </div>
-
-                      <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                        <Label>Nilai Kelancaran</Label>
-                        <div className="text-right">
-                          <span className="text-2xl font-bold text-primary">{nilaiKelancaran}</span>
-
-                          {nilaiKelancaran < BATAS_LANCAR_SETORAN && (
-                            <p className="text-xs text-yellow-600">
-                              Kurang {selisihNilai} poin dari batas lancar
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <Label>Catatan Tajwid *</Label>
-                        <Textarea 
-                          placeholder="Contoh: Bacaan ikhfa perlu diperbaiki, mad wajib sudah baik..."
-                          value={catatanTajwid}
-                          onChange={(e) => setCatatanTajwid(e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <Button onClick={handleSubmit} className="w-full bg-primary hover:bg-primary/90">
-                    Simpan Setoran
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">
+            Setoran Harian
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Monitoring setoran hafalan, murojaah, dan tilawah
+          </p>
         </div>
 
-        {/* Main Content */}
+        {/* Filters */}
         <Card>
-          <CardHeader>
-            <CardTitle>Daftar Setoran</CardTitle>
-            <CardDescription>Riwayat setoran hafalan santri</CardDescription>
-          </CardHeader>
-          <CardContent className="overflow-hidden">
-            {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <Select value={filterJuz} onValueChange={setFilterJuz}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua Juz" />
-                </SelectTrigger>
-
-                <SelectContent className="p-2">
-                  {/* item default */}
-                  <SelectItem value="all">Semua Juz</SelectItem>
-
-                  {/* grid juz */}
-                  <div className="grid grid-cols-6 gap-1 mt-2">
-                    {Array.from({ length: 30 }, (_, i) => (
-                      <SelectItem
-                        key={i + 1}
-                        value={String(i + 1)}
-                        className="justify-center"
-                      >
-                        {i + 1}
+          <CardContent className="p-3 md:p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <User className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium">Filter</span>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs md:text-sm">Halaqoh</Label>
+                <Select
+                  value={selectedHalaqoh || "all"}
+                  onValueChange={(v) => {
+                    setSelectedHalaqoh(v === "all" ? "" : v);
+                    setSelectedSantri("");
+                  }}
+                >
+                  <SelectTrigger className="h-9 text-xs md:text-sm">
+                    <SelectValue placeholder="Semua Halaqoh" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Semua Halaqoh</SelectItem>
+                    {MOCK_HALAQOH.map((h) => (
+                      <SelectItem key={h.id} value={h.id}>
+                        {h.nama}
                       </SelectItem>
                     ))}
-                  </div>
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterSantri} onValueChange={setFilterSantri}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua Santri" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Santri</SelectItem>
-                  {mockSantri.map(santri => (
-                    <SelectItem key={santri.id} value={santri.id}>{santri.nama}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              
-              <Select value={filterHalaqoh} onValueChange={setFilterHalaqoh}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Semua Halaqoh" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Halaqoh</SelectItem>
-                  <SelectItem value="azhary">Halaqoh Al-Azhary</SelectItem>
-                  <SelectItem value="furqon">Halaqoh Al-Furqon</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                  </SelectContent>
+                </Select>
+              </div>
 
-            {/* Table */}
-            <div className="relative -mx-4 sm:-mx-6 overflow-x-auto">
-              <div className="px-4 sm:px-6">
-                <div className="rounded-md border">
-                  <Table className="min-w-[900px]">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Tanggal</TableHead>
-                        <TableHead>Santri</TableHead>
-                        <TableHead>Ustadz</TableHead>
-                        <TableHead>Juz</TableHead>
-                        <TableHead>Ayat</TableHead>
-                        <TableHead>Nilai</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Catatan</TableHead>
-                        <TableHead>Aksi</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {mockSetoran.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.tanggal}</TableCell>
-                          <TableCell className="font-medium">{item.santri}</TableCell>
-                          <TableCell>{item.ustadz}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="bg-primary/10 text-primary border-primary">
-                              Juz {item.juz}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{item.ayatDari}-{item.ayatSampai}</TableCell>
-                          <TableCell className="font-semibold text-primary">{item.nilai}</TableCell>
-                          <TableCell>
-                            <Badge
-                              className={
-                                item.status === "Lancar"
-                                  ? "bg-green-500 hover:bg-green-600"
-                                  : "bg-yellow-500 hover:bg-yellow-600"
-                              }
-                            >
-                              {item.status}
-                            </Badge>
-                          </TableCell>
+              <div className="space-y-1">
+                <Label className="text-xs md:text-sm">Santri *</Label>
+                <Select
+                  value={selectedSantri}
+                  onValueChange={setSelectedSantri}
+                >
+                  <SelectTrigger className="h-9 text-xs md:text-sm">
+                    <SelectValue placeholder="Pilih Santri" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {santriList.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.nama}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                          <TableCell className="text-muted-foreground">{item.catatan}</TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button 
-                                variant="ghost" 
-                                size="icon" 
-                                className="h-8 w-8 text-destructive"
-                                onClick={() => handleDelete(item.id)}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+              <div className="space-y-1">
+                <Label className="text-xs md:text-sm">Bulan</Label>
+                <Select
+                  value={String(month)}
+                  onValueChange={(v) => setMonth(Number(v))}
+                >
+                  <SelectTrigger className="h-9 text-xs md:text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {monthOptions.map((m, i) => (
+                      <SelectItem key={i} value={String(i)}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-xs md:text-sm">Tahun</Label>
+                <Select
+                  value={String(year)}
+                  onValueChange={(v) => setYear(Number(v))}
+                >
+                  <SelectTrigger className="h-9 text-xs md:text-sm">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {yearOptions.map((y) => (
+                      <SelectItem key={y} value={String(y)}>
+                        {y}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
+
+            {santriData && (
+              <div className="mt-3 p-2 bg-primary/10 rounded text-xs md:text-sm">
+                <span className="font-medium">{santriData.nama}</span> •{" "}
+                NIS: {santriData.nis} •{" "}
+                {MOCK_HALAQOH.find((h) => h.id === santriData.idHalaqoh)?.nama || "-"}
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        {/* Tabs */}
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => {
+            setActiveTab(v as MainTab);
+            const subs = SUB_OPTIONS[v as MainTab];
+            setSubType(subs.length > 0 ? subs[0].value : "");
+          }}
+        >
+          <TabsList className="grid w-full grid-cols-4 h-auto">
+            <TabsTrigger
+              value="setoran_hafalan"
+              className="text-[10px] md:text-sm py-2 gap-1"
+            >
+              <BookMarked className="w-3 h-3 hidden md:block" />
+              Hafalan
+            </TabsTrigger>
+            <TabsTrigger
+              value="murojaah"
+              className="text-[10px] md:text-sm py-2 gap-1"
+            >
+              <RefreshCw className="w-3 h-3 hidden md:block" />
+              Murojaah
+            </TabsTrigger>
+            <TabsTrigger
+              value="tilawah"
+              className="text-[10px] md:text-sm py-2 gap-1"
+            >
+              <BookOpen className="w-3 h-3 hidden md:block" />
+              Tilawah
+            </TabsTrigger>
+            <TabsTrigger
+              value="murojaah_rumah"
+              className="text-[10px] md:text-sm py-2 gap-1"
+            >
+              <Home className="w-3 h-3 hidden md:block" />
+              Rumah
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Sub-type selector */}
+          {subOpts.length > 0 && (
+            <div className="mt-3 flex gap-1.5 flex-wrap">
+              {subOpts.map((opt) => (
+                <Button
+                  key={opt.value}
+                  size="sm"
+                  variant={subType === opt.value ? "default" : "outline"}
+                  className="h-7 text-[10px] md:text-sm"
+                  onClick={() => setSubType(opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {/* Month navigation */}
+          <div className="flex items-center justify-between mt-3">
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handlePrevMonth}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <span className="text-sm font-medium text-foreground">
+              {monthOptions[month]} {year}
+            </span>
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleNextMonth}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
+          </div>
+
+          {/* Calendar */}
+          <div className="mt-3">
+            {!selectedSantri ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground text-sm">
+                  Pilih santri terlebih dahulu untuk melihat kalender monitoring
+                </CardContent>
+              </Card>
+            ) : isMobile ? (
+              <MobileCalendar
+                month={month}
+                year={year}
+                entries={filteredEntries}
+                onDateClick={handleDateClick}
+                headerTitle={HEADER_TITLES[activeTab]}
+                allowWeekends={activeTab === "murojaah_rumah"}
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <div className="min-w-[500px]">
+                  <MonthlyCalendar
+                    month={month}
+                    year={year}
+                    entries={filteredEntries}
+                    onDateClick={handleDateClick}
+                    headerTitle={HEADER_TITLES[activeTab]}
+                    allowWeekends={activeTab === "murojaah_rumah"}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Legend */}
+          {selectedSantri && (
+            <div className="flex flex-wrap gap-3 mt-3 text-[10px] md:text-sm text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-sm bg-[hsl(160,60%,45%)]/20 border border-[hsl(160,60%,45%)]/40" />
+                <span>Lancar / Lulus</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-sm bg-[hsl(45,90%,55%)]/20 border border-[hsl(45,90%,55%)]/40" />
+                <span>Kurang Lancar</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded-sm bg-destructive/20 border border-destructive/40" />
+                <span>Ulangi</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span>⭐</span>
+                <span>Ujian</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span>🏠</span>
+                <span>Murojaah Rumah</span>
+              </div>
+            </div>
+          )}
+        </Tabs>
+
+        {/* Entry Modal */}
+        <EntryModal
+          open={openEntry}
+          onOpenChange={setOpenEntry}
+          date={modalDate}
+          santriName={santriData?.nama || ""}
+          activeTab={activeTab}
+          subType={subType as any}
+          onSave={handleSaveEntry}
+          santriId={selectedSantri}
+          existingRecords={entries as any}
+        />
+
+        <AddDrillModal
+          open={openDrill}
+          onOpenChange={setOpenDrill}
+          date={modalDate}
+          santriName={santriData?.nama || ""}
+          initialSantriId={selectedSantri || undefined}
+          onSuccess={handleSaveEntry}
+          drillHistory={[]}
+        />
+
+        <TasmiForm1Juz 
+          open={openTasmi} 
+          onOpenChange={setOpenTasmi} 
+          santriList={dummySantri} 
+          date={modalDate}
+          santriName={santriData?.nama || ""}
+          getPredikat={getPredikat} 
+          onSuccess={handleSaveEntry}
+        />
+
+        <TasmiForm5Juz
+          open={openTasmi5Juz}
+          onOpenChange={setOpenTasmi5Juz}
+          santriList={dummySantri}
+          date={modalDate}
+          santriName={santriData?.nama || ""}
+          getPredikat={getPredikat}
+          onSuccess={handleSaveEntry}
+        />
+
+        <TilawatiUjianForm 
+          open={openUjianJilid} 
+          onSubmit={handleSaveEntry}
+          date={modalDate}
+          santriName={santriData?.nama || ""}
+          onOpenChange={setOpenUjianJilid}
+          initialData={remedialTarget} 
+        />
+
+        <TilawahSetoranForm 
+          open={openTilawah} 
+          onOpenChange={setOpenTilawah}
+          date={modalDate}
+          santriName={santriData?.nama || ""}
+          onSuccess={handleSaveEntry}
+          initialSantriId={selectedSantri}
+        />
+
+        <EntryHistoryPopup
+          open={openHistory}
+          onOpenChange={setOpenHistory}
+          date={modalDate}
+          santriName={santriData?.nama || ""}
+          entries={modalDate ? getEntriesForDate(modalDate) : []}
+          onDelete={handleDeleteEntry}
+          onAddNew={() => {
+            setOpenHistory(false);
+            if (activeTab === "setoran_hafalan") {
+              if (subType === "drill") setOpenDrill(true);
+              else if (subType === "tasmi") setOpenTasmi(true);
+              else if (subType === "tasmi5juz") setOpenTasmi5Juz(true);
+              else setOpenEntry(true);
+            } else if (activeTab === "tilawah") {
+              if (subType === "tilawah_harian") setOpenTilawah(true);
+              else setOpenUjianJilid(true);
+            } else {
+              setOpenEntry(true);
+            }
+          }}
+        />
       </div>
     </Layout>
   );
