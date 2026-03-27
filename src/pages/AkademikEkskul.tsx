@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,19 +7,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Save } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { MOCK_TAHUN_AJARAN, MOCK_KELAS_AKADEMIK, MOCK_EKSKUL, getSantriByKelas } from "@/lib/mock-akademik-data";
 
 type Santri = { id: string; nama_santri: string; nis: string };
-type Ekskul = { id: string; nama: string; aktif: boolean | null };
-type TahunAjaran = { id: string; nama: string; semester: string; aktif: boolean | null };
 
 interface NilaiEkskul {
   rekap_kehadiran: number;
   nilai_praktik: number;
   konversi_nilai: number;
   hasil_akhir: number;
-  dbId?: string;
 }
 
 function getPredikat(nilai: number): string {
@@ -30,69 +27,15 @@ function getPredikat(nilai: number): string {
 }
 
 export default function AkademikEkskul() {
-  const [santriList, setSantriList] = useState<Santri[]>([]);
-  const [kelasList, setKelasList] = useState<{ id: string; nama_kelas: string; jenjang: string | null }[]>([]);
-  const [tahunAjaranList, setTahunAjaranList] = useState<TahunAjaran[]>([]);
-  const [ekskulList, setEkskulList] = useState<Ekskul[]>([]);
-
-  const [selectedTa, setSelectedTa] = useState("");
+  const [selectedTa, setSelectedTa] = useState(MOCK_TAHUN_AJARAN.find(t => t.aktif)?.id || "");
   const [filterJenjang, setFilterJenjang] = useState("SMP");
   const [selectedKelas, setSelectedKelas] = useState("");
-  const [selectedEkskul, setSelectedEkskul] = useState("");
-
+  const [selectedEkskul, setSelectedEkskul] = useState(MOCK_EKSKUL[0]?.id || "");
   const [data, setData] = useState<Record<string, NilaiEkskul>>({});
   const [saving, setSaving] = useState(false);
 
-  const filteredKelas = kelasList.filter(k => !k.jenjang || k.jenjang === filterJenjang);
-
-  useEffect(() => {
-    (async () => {
-      const [taRes, kelasRes, ekskulRes] = await Promise.all([
-        supabase.from("tahun_ajaran").select("*").order("created_at", { ascending: false }),
-        supabase.from("kelas").select("id, nama_kelas, jenjang").order("nama_kelas"),
-        supabase.from("ekstrakurikuler").select("*").eq("aktif", true).order("nama"),
-      ]);
-      if (taRes.data) {
-        setTahunAjaranList(taRes.data as TahunAjaran[]);
-        const aktif = (taRes.data as TahunAjaran[]).find(t => t.aktif);
-        if (aktif) setSelectedTa(aktif.id);
-      }
-      if (kelasRes.data) setKelasList(kelasRes.data);
-      if (ekskulRes.data) {
-        setEkskulList(ekskulRes.data as Ekskul[]);
-        if (ekskulRes.data.length > 0) setSelectedEkskul(ekskulRes.data[0].id);
-      }
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (selectedKelas && selectedTa && selectedEkskul) loadData();
-  }, [selectedKelas, selectedTa, selectedEkskul]);
-
-  const loadData = async () => {
-    const { data: santriData } = await supabase.from("santri").select("id, nama_santri, nis")
-      .eq("id_kelas", selectedKelas).eq("status", "Aktif").order("nama_santri");
-    if (santriData) setSantriList(santriData);
-
-    if (santriData && santriData.length > 0) {
-      const { data: nilaiData } = await supabase.from("nilai_ekskul").select("*")
-        .in("id_santri", santriData.map(s => s.id))
-        .eq("id_ekskul", selectedEkskul)
-        .eq("id_tahun_ajaran", selectedTa);
-
-      const map: Record<string, NilaiEkskul> = {};
-      (nilaiData || []).forEach((n: any) => {
-        map[n.id_santri] = {
-          rekap_kehadiran: n.rekap_kehadiran || 0,
-          nilai_praktik: Number(n.nilai_praktik) || 0,
-          konversi_nilai: Number(n.konversi_nilai) || 0,
-          hasil_akhir: Number(n.hasil_akhir) || 0,
-          dbId: n.id,
-        };
-      });
-      setData(map);
-    }
-  };
+  const filteredKelas = MOCK_KELAS_AKADEMIK.filter(k => !k.jenjang || k.jenjang === filterJenjang);
+  const santriList = useMemo(() => selectedKelas ? getSantriByKelas(selectedKelas).map(s => ({ id: s.id, nama_santri: s.nama_santri, nis: s.nis })) : [], [selectedKelas]);
 
   const handleChange = (santriId: string, field: keyof NilaiEkskul, value: string) => {
     const num = Math.max(0, Math.min(100, parseInt(value) || 0));
@@ -105,26 +48,15 @@ export default function AkademikEkskul() {
     });
   };
 
-  const handleSave = async () => {
+  const handleSave = () => {
     setSaving(true);
-    const upsertData = Object.entries(data).map(([id_santri, d]) => ({
-      ...(d.dbId ? { id: d.dbId } : {}),
-      id_santri,
-      id_ekskul: selectedEkskul,
-      id_tahun_ajaran: selectedTa,
-      rekap_kehadiran: d.rekap_kehadiran,
-      nilai_praktik: d.nilai_praktik,
-      konversi_nilai: d.konversi_nilai,
-      hasil_akhir: d.hasil_akhir,
-    }));
-
-    const { error } = await supabase.from("nilai_ekskul").upsert(upsertData as any, { onConflict: "id_santri,id_ekskul,id_tahun_ajaran" });
-    if (error) toast.error("Gagal menyimpan: " + error.message);
-    else { toast.success("Nilai ekstrakurikuler berhasil disimpan"); loadData(); }
-    setSaving(false);
+    setTimeout(() => {
+      toast.success("Nilai ekstrakurikuler berhasil disimpan");
+      setSaving(false);
+    }, 300);
   };
 
-  const currentEkskul = ekskulList.find(e => e.id === selectedEkskul);
+  const currentEkskul = MOCK_EKSKUL.find(e => e.id === selectedEkskul);
 
   return (
     <Layout>
@@ -145,7 +77,7 @@ export default function AkademikEkskul() {
                 <Select value={selectedTa} onValueChange={setSelectedTa}>
                   <SelectTrigger><SelectValue placeholder="Pilih TA" /></SelectTrigger>
                   <SelectContent>
-                    {tahunAjaranList.map(ta => <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>)}
+                    {MOCK_TAHUN_AJARAN.map(ta => <SelectItem key={ta.id} value={ta.id}>{ta.nama} - {ta.semester} {ta.aktif ? "✓" : ""}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -174,7 +106,7 @@ export default function AkademikEkskul() {
                 <Select value={selectedEkskul} onValueChange={setSelectedEkskul}>
                   <SelectTrigger><SelectValue placeholder="Pilih Ekskul" /></SelectTrigger>
                   <SelectContent>
-                    {ekskulList.map(e => <SelectItem key={e.id} value={e.id}>{e.nama}</SelectItem>)}
+                    {MOCK_EKSKUL.map(e => <SelectItem key={e.id} value={e.id}>{e.nama}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -209,14 +141,10 @@ export default function AkademikEkskul() {
                           <TableCell>{sIdx + 1}</TableCell>
                           <TableCell className="font-medium text-sm">{santri.nama_santri}</TableCell>
                           <TableCell className="p-1">
-                            <Input type="number" min={0} max={100} value={d.rekap_kehadiran}
-                              onChange={(e) => handleChange(santri.id, "rekap_kehadiran", e.target.value)}
-                              className="h-8 w-16 text-center mx-auto text-sm" />
+                            <Input type="number" min={0} max={100} value={d.rekap_kehadiran} onChange={(e) => handleChange(santri.id, "rekap_kehadiran", e.target.value)} className="h-8 w-16 text-center mx-auto text-sm" />
                           </TableCell>
                           <TableCell className="p-1">
-                            <Input type="number" min={0} max={100} value={d.nilai_praktik}
-                              onChange={(e) => handleChange(santri.id, "nilai_praktik", e.target.value)}
-                              className="h-8 w-16 text-center mx-auto text-sm" />
+                            <Input type="number" min={0} max={100} value={d.nilai_praktik} onChange={(e) => handleChange(santri.id, "nilai_praktik", e.target.value)} className="h-8 w-16 text-center mx-auto text-sm" />
                           </TableCell>
                           <TableCell className="text-center font-semibold">{d.konversi_nilai}</TableCell>
                           <TableCell className="text-center font-bold">{d.hasil_akhir}</TableCell>
